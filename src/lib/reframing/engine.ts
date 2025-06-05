@@ -58,8 +58,8 @@ export class ReframingEngine {
         }
       }
     } else if (this.config.trackingMode === 'multi') {
-      // Include all head detections
-      targets = detections.filter(d => d.class === 'head');
+      // Include all person detections  
+      targets = detections.filter(d => d.class === 'person');
     } else {
       // Auto mode - include primary target and nearby objects
       if (this.config.targetSelection !== 'manual') {

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { FaceYOLODetector } from '@/lib/detection/face-yolo';
+import { PersonYOLODetector } from '@/lib/detection/person-yolo';
 import { ObjectTracker } from '@/lib/detection/tracker';
 import { DetectionInterpolator } from '@/lib/detection/interpolator';
 import { Detection, BoundingBox, TrackedObject } from '@/types';
@@ -12,7 +12,7 @@ export function useObjectDetection() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [targetDetection, setTargetDetection] = useState<Detection | null>(null);
   
-  const detectorRef = useRef<FaceYOLODetector | null>(null);
+  const detectorRef = useRef<PersonYOLODetector | null>(null);
   const trackerRef = useRef<ObjectTracker | null>(null);
   const interpolatorRef = useRef<DetectionInterpolator | null>(null);
 
@@ -20,11 +20,11 @@ export function useObjectDetection() {
   useEffect(() => {
     const initDetector = async () => {
       try {
-        detectorRef.current = new FaceYOLODetector();
+        detectorRef.current = new PersonYOLODetector();
         await detectorRef.current.initialize();
         setIsModelLoaded(true);
       } catch (error) {
-        console.error('Failed to initialize Head detector:', error);
+        console.error('Failed to initialize Person detector:', error);
         setIsModelLoaded(false);
       }
     };

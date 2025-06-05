@@ -42,21 +42,33 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
 
     // Draw first frame
     ctx.drawImage(videoElement, 0, 0);
+    console.log('Canvas size:', canvas.width, 'x', canvas.height);
 
     // Import and run YOLO detection
     try {
-      const { FaceYOLODetector } = await import('@/lib/detection/face-yolo');
-      const detector = new FaceYOLODetector();
+      console.log('Importing PersonYOLODetector...');
+      const { PersonYOLODetector } = await import('@/lib/detection/person-yolo');
+      const detector = new PersonYOLODetector();
+      
+      console.log('Initializing detector...');
       await detector.initialize();
       
-      const headDetections = await detector.detect(canvas);
-      setDetections(headDetections);
+      console.log('Running detection on first frame...');
+      const personDetections = await detector.detect(canvas);
+      console.log('Detections found:', personDetections.length);
+      
+      setDetections(personDetections);
       detector.dispose();
 
       // Draw detections
-      drawDetections(overlayCtx, headDetections);
+      if (personDetections.length > 0) {
+        drawDetections(overlayCtx, personDetections);
+      } else {
+        console.warn('No persons detected in the first frame');
+      }
     } catch (error) {
-      console.error('Failed to detect heads:', error);
+      console.error('Failed to detect persons:', error);
+      alert('Failed to detect persons in the first frame. Please try a different video or ensure there are visible people in the first frame.');
     } finally {
       setIsDetecting(false);
     }
@@ -77,7 +89,7 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
       // Draw label
       ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
       ctx.font = 'bold 16px Arial';
-      const label = `Head ${index + 1} (${(detection.confidence * 100).toFixed(0)}%)`;
+      const label = `Person ${index + 1} (${(detection.confidence * 100).toFixed(0)}%)`;
       const textMetrics = ctx.measureText(label);
       
       ctx.fillRect(
@@ -134,11 +146,11 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
 
   return (
     <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-      <h3 className="text-lg font-semibold text-white mb-4">Select Target Head</h3>
+      <h3 className="text-lg font-semibold text-white mb-4">Select Target Person</h3>
       
       <div className="mb-4 text-sm text-gray-300">
-        <p>Click on the head you want to track throughout the video.</p>
-        <p>The selected head will be highlighted in green.</p>
+        <p>Click on the person you want to track throughout the video.</p>
+        <p>The selected person will be highlighted in green.</p>
       </div>
 
       <div className="relative mb-4 bg-black rounded-lg overflow-hidden" style={{ maxHeight: '400px' }}>
@@ -170,8 +182,8 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
       {detections.length > 0 && (
         <div className="mb-4">
           <p className="text-sm text-gray-300">
-            Found {detections.length} head{detections.length > 1 ? 's' : ''} in the first frame.
-            {selectedIndex !== null && ` Head ${selectedIndex + 1} selected.`}
+            Found {detections.length} person{detections.length > 1 ? 's' : ''} in the first frame.
+            {selectedIndex !== null && ` Person ${selectedIndex + 1} selected.`}
           </p>
         </div>
       )}

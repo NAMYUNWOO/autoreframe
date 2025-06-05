@@ -191,7 +191,7 @@ export default function Home() {
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-white">AutoReframer</h1>
-                <p className="text-sm text-gray-400">AI-powered head detection & reframing</p>
+                <p className="text-sm text-gray-400">AI-powered person detection & reframing</p>
               </div>
             </div>
             
@@ -241,7 +241,7 @@ export default function Home() {
                 Upload Your Video
               </h2>
               <p className="text-gray-400">
-                Automatically detect and track heads (including back view) to create perfectly framed videos
+                Automatically detect and track persons to create perfectly framed videos
               </p>
             </div>
             
@@ -257,7 +257,7 @@ export default function Home() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  <span>Loading head detection model...</span>
+                  <span>Loading person detection model...</span>
                 </div>
               </div>
             )}
@@ -295,7 +295,7 @@ export default function Home() {
               {/* Object Detection */}
               {!detectionComplete && !showHeadSelector && (
                 <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-                  <h3 className="text-lg font-semibold text-white mb-4">Head Detection</h3>
+                  <h3 className="text-lg font-semibold text-white mb-4">Person Detection</h3>
                   <button
                     onClick={handleDetection}
                     disabled={isDetecting || !isModelLoaded}
@@ -309,9 +309,9 @@ export default function Home() {
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span>Detecting Heads...</span>
+                        <span>Detecting Persons...</span>
                       </span>
-                    ) : 'Start Head Detection'}
+                    ) : 'Start Person Detection'}
                   </button>
                 </div>
               )}
@@ -334,7 +334,7 @@ export default function Home() {
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span>Tracking selected head</span>
+                      <span>Tracking selected person</span>
                     </span>
                   </div>
                 )}

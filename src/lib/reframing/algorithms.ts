@@ -4,12 +4,73 @@ export class SmoothingAlgorithm {
   private history: FrameTransform[] = [];
   private smoothingFactor: number;
   private maxHistorySize: number = 30;
+  private lastValidTransform: FrameTransform | null = null;
+  private velocityHistory: { vx: number; vy: number; vs: number }[] = [];
+  private maxVelocity: number = 50; // Max pixels per frame (increased for faster movements)
+  private maxAcceleration: number = 15; // Max change in velocity per frame
 
   constructor(smoothingFactor: number = 0.8) {
     this.smoothingFactor = smoothingFactor;
   }
 
   smooth(currentTransform: FrameTransform): FrameTransform {
+    // If we don't have a valid transform (no detection), use prediction
+    if (currentTransform.x === 0 && currentTransform.y === 0) {
+      if (this.lastValidTransform && this.velocityHistory.length > 0) {
+        const lastVel = this.velocityHistory[this.velocityHistory.length - 1];
+        currentTransform = {
+          x: this.lastValidTransform.x + lastVel.vx,
+          y: this.lastValidTransform.y + lastVel.vy,
+          scale: this.lastValidTransform.scale + lastVel.vs,
+          rotation: 0
+        };
+      } else if (this.lastValidTransform) {
+        currentTransform = { ...this.lastValidTransform };
+      }
+    } else {
+      this.lastValidTransform = { ...currentTransform };
+    }
+
+    // Apply velocity constraints
+    if (this.history.length > 0) {
+      const prevTransform = this.history[this.history.length - 1];
+      const dx = currentTransform.x - prevTransform.x;
+      const dy = currentTransform.y - prevTransform.y;
+      const ds = currentTransform.scale - prevTransform.scale;
+      
+      // Calculate velocity
+      const velocity = Math.sqrt(dx * dx + dy * dy);
+      
+      // If velocity exceeds max, constrain it
+      if (velocity > this.maxVelocity) {
+        const scale = this.maxVelocity / velocity;
+        currentTransform.x = prevTransform.x + dx * scale;
+        currentTransform.y = prevTransform.y + dy * scale;
+      }
+      
+      // Apply acceleration constraints
+      if (this.velocityHistory.length > 0) {
+        const lastVel = this.velocityHistory[this.velocityHistory.length - 1];
+        const dvx = dx - lastVel.vx;
+        const dvy = dy - lastVel.vy;
+        const acceleration = Math.sqrt(dvx * dvx + dvy * dvy);
+        
+        if (acceleration > this.maxAcceleration) {
+          const scale = this.maxAcceleration / acceleration;
+          const newVx = lastVel.vx + dvx * scale;
+          const newVy = lastVel.vy + dvy * scale;
+          currentTransform.x = prevTransform.x + newVx;
+          currentTransform.y = prevTransform.y + newVy;
+        }
+      }
+      
+      // Update velocity history
+      this.velocityHistory.push({ vx: dx, vy: dy, vs: ds });
+      if (this.velocityHistory.length > 10) {
+        this.velocityHistory.shift();
+      }
+    }
+
     this.history.push(currentTransform);
     
     if (this.history.length > this.maxHistorySize) {
@@ -20,22 +81,42 @@ export class SmoothingAlgorithm {
       return currentTransform;
     }
 
-    // Exponential moving average
-    const smoothed: FrameTransform = { ...currentTransform };
-    const alpha = 1 - this.smoothingFactor;
+    // Apply Kalman-filter-like smoothing
+    const windowSize = Math.min(20, this.history.length);
+    let smoothedX = 0, smoothedY = 0, smoothedScale = 0;
+    let totalWeight = 0;
     
-    for (let i = this.history.length - 2; i >= 0; i--) {
-      const weight = Math.pow(alpha, this.history.length - 1 - i);
-      smoothed.x += (this.history[i].x - smoothed.x) * weight;
-      smoothed.y += (this.history[i].y - smoothed.y) * weight;
-      smoothed.scale += (this.history[i].scale - smoothed.scale) * weight;
+    // Use both position and velocity for prediction
+    for (let i = 0; i < windowSize; i++) {
+      const idx = this.history.length - windowSize + i;
+      const transform = this.history[idx];
+      
+      // Weight based on recency and consistency
+      const recencyWeight = Math.exp(-((windowSize - i - 1) * 0.1));
+      const weight = recencyWeight;
+      
+      smoothedX += transform.x * weight;
+      smoothedY += transform.y * weight;
+      smoothedScale += transform.scale * weight;
+      totalWeight += weight;
     }
+    
+    smoothedX /= totalWeight;
+    smoothedY /= totalWeight;
+    smoothedScale /= totalWeight;
 
-    return smoothed;
+    return {
+      x: smoothedX,
+      y: smoothedY,
+      scale: smoothedScale,
+      rotation: 0
+    };
   }
 
   reset(): void {
     this.history = [];
+    this.lastValidTransform = null;
+    this.velocityHistory = [];
   }
 }
 

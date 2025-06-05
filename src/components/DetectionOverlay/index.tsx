@@ -24,13 +24,13 @@ export function DetectionOverlay({
   onConfidenceChange
 }: DetectionOverlayProps) {
   return (
-    <div className="w-full max-w-md mx-auto p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-      <h3 className="text-lg font-semibold mb-4">Detection Settings</h3>
+    <div className="w-full">
+      <h3 className="text-lg font-semibold text-white mb-4">Detection Settings</h3>
       
       {/* Toggle Overlays */}
       <div className="space-y-3 mb-4">
         <label className="flex items-center justify-between">
-          <span className="text-sm font-medium">Show Detections</span>
+          <span className="text-sm font-medium text-gray-200">Show Detections</span>
           <input
             type="checkbox"
             checked={showDetections}
@@ -40,7 +40,7 @@ export function DetectionOverlay({
         </label>
         
         <label className="flex items-center justify-between">
-          <span className="text-sm font-medium">Show Reframing</span>
+          <span className="text-sm font-medium text-gray-200">Show Reframing</span>
           <input
             type="checkbox"
             checked={showReframing}
@@ -52,7 +52,7 @@ export function DetectionOverlay({
 
       {/* Confidence Threshold */}
       <div className="mb-4">
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-sm font-medium text-gray-200 mb-2">
           Confidence Threshold: {(confidenceThreshold * 100).toFixed(0)}%
         </label>
         <input
@@ -68,7 +68,7 @@ export function DetectionOverlay({
       {/* Tracked Objects Summary */}
       {trackedObjects.length > 0 && (
         <div className="mt-4">
-          <h4 className="text-sm font-semibold mb-2">Tracked Objects</h4>
+          <h4 className="text-sm font-semibold text-white mb-2">Tracked Heads</h4>
           <div className="space-y-2 max-h-40 overflow-y-auto">
             {trackedObjects.map(obj => {
               const frameCount = obj.lastFrame - obj.firstFrame + 1;
@@ -79,12 +79,12 @@ export function DetectionOverlay({
                   key={obj.id}
                   className={`p-2 rounded text-sm ${
                     isSelected 
-                      ? 'bg-blue-100 dark:bg-blue-900 border border-blue-500' 
-                      : 'bg-gray-100 dark:bg-gray-700'
+                      ? 'bg-blue-500/20 border border-blue-500 text-blue-200' 
+                      : 'bg-white/5 text-gray-300'
                   }`}
                 >
                   <div className="font-medium">{obj.label}</div>
-                  <div className="text-xs text-gray-600 dark:text-gray-400">
+                  <div className="text-xs text-gray-400">
                     Track {obj.id.split('_')[1]} • {frameCount} frames
                   </div>
                 </div>

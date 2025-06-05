@@ -34,7 +34,9 @@ export class YOLODetector {
       
       // Warm up the model
       const dummyInput = tf.zeros([1, this.inputSize, this.inputSize, 3]);
-      await this.model.predict(dummyInput).array();
+      const output = this.model.predict(dummyInput) as tf.Tensor;
+      await output.array();
+      output.dispose();
       dummyInput.dispose();
     } catch (error) {
       console.error('Failed to initialize YOLO model:', error);

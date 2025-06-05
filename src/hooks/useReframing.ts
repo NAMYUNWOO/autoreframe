@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ReframingEngine } from '@/lib/reframing/engine';
-import { VideoExporter } from '@/lib/video/exporter';
+import { FFmpegExporter } from '@/lib/video/ffmpeg-exporter';
+import { SimpleExporter } from '@/lib/video/simple-exporter';
 import { 
   ReframingConfig, 
   FrameTransform, 
@@ -21,7 +22,8 @@ export function useReframing() {
   const [currentPreset, setCurrentPreset] = useState('instagram-reel');
   
   const engineRef = useRef<ReframingEngine | null>(null);
-  const exporterRef = useRef<VideoExporter | null>(null);
+  const ffmpegExporterRef = useRef<FFmpegExporter | null>(null);
+  const simpleExporterRef = useRef<SimpleExporter | null>(null);
 
   // Initialize reframing engine
   useEffect(() => {
@@ -89,20 +91,66 @@ export function useReframing() {
     setExportProgress(0);
 
     try {
-      exporterRef.current = new VideoExporter(videoElement);
+      let blob: Blob;
       
-      const blob = await exporterRef.current.export(
-        transforms,
-        metadata,
-        config.outputRatio,
-        options,
-        (progress) => setExportProgress(progress)
-      );
+      // Try FFmpeg first if MP4 is requested
+      if (options.format === 'mp4') {
+        try {
+          console.log('Trying FFmpeg export...');
+          const response = await fetch(videoElement.src);
+          const videoBlob = await response.blob();
+          
+          if (!ffmpegExporterRef.current) {
+            ffmpegExporterRef.current = new FFmpegExporter();
+          }
+          
+          blob = await ffmpegExporterRef.current.export(
+            videoBlob,
+            transforms,
+            metadata,
+            config.outputRatio,
+            options,
+            (progress) => setExportProgress(progress)
+          );
+        } catch (ffmpegError) {
+          console.error('FFmpeg export failed, falling back to simple export:', ffmpegError);
+          // Fall back to simple export
+          options.format = 'webm'; // Force WebM for fallback
+          
+          if (!simpleExporterRef.current) {
+            simpleExporterRef.current = new SimpleExporter();
+          }
+          
+          blob = await simpleExporterRef.current.export(
+            videoElement,
+            transforms,
+            metadata,
+            config.outputRatio,
+            options,
+            (progress) => setExportProgress(progress)
+          );
+        }
+      } else {
+        // Use simple export for WebM
+        console.log('Using simple export for WebM...');
+        if (!simpleExporterRef.current) {
+          simpleExporterRef.current = new SimpleExporter();
+        }
+        
+        blob = await simpleExporterRef.current.export(
+          videoElement,
+          transforms,
+          metadata,
+          config.outputRatio,
+          options,
+          (progress) => setExportProgress(progress)
+        );
+      }
 
       return blob;
     } finally {
       setIsExporting(false);
-      setExportProgress(0);
+      setExportProgress(100);
     }
   }, [transforms, config.outputRatio]);
 
@@ -110,10 +158,17 @@ export function useReframing() {
     return transforms.get(frameNumber);
   }, [transforms]);
 
+  const updateTransform = useCallback((frameNumber: number, transform: FrameTransform) => {
+    setTransforms(prev => {
+      const newMap = new Map(prev);
+      newMap.set(frameNumber, transform);
+      return newMap;
+    });
+  }, []);
+
   const cancelExport = useCallback(() => {
-    if (exporterRef.current) {
-      exporterRef.current.cancel();
-    }
+    // Currently not implemented for FrameAccurateExporter
+    console.warn('Export cancellation not implemented');
   }, []);
 
   const reset = useCallback(() => {
@@ -135,6 +190,7 @@ export function useReframing() {
     applyPreset,
     exportVideo,
     getFrameTransform,
+    updateTransform,
     cancelExport,
     reset
   };

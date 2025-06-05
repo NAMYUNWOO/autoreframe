@@ -27,17 +27,17 @@ export function ReframingControls({
   isProcessing
 }: ReframingControlsProps) {
   return (
-    <div className="w-full max-w-md mx-auto p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
-      <h2 className="text-xl font-bold mb-4">Reframing Settings</h2>
+    <div className="w-full">
+      <h2 className="text-xl font-bold text-white mb-4">Reframing Settings</h2>
       
       {/* Preset Selection */}
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">Preset</label>
+        <label className="block text-sm font-medium text-gray-200 mb-2">Preset</label>
         <select
           value={currentPreset}
           onChange={(e) => onPresetChange(e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md 
-                     bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          className="w-full px-3 py-2 border border-gray-600 rounded-md 
+                     bg-gray-700 text-gray-100"
         >
           {Object.keys(REFRAMING_PRESETS).map(preset => (
             <option key={preset} value={preset}>
@@ -51,7 +51,7 @@ export function ReframingControls({
 
       {/* Output Ratio */}
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">Output Ratio</label>
+        <label className="block text-sm font-medium text-gray-200 mb-2">Output Ratio</label>
         <div className="grid grid-cols-3 gap-2">
           {['16:9', '9:16', '1:1', '4:3', '3:4'].map(ratio => (
             <button
@@ -60,7 +60,7 @@ export function ReframingControls({
               className={`px-3 py-2 rounded-md text-sm font-medium transition-colors
                 ${config.outputRatio === ratio 
                   ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}`}
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
             >
               {ratio}
             </button>
@@ -70,7 +70,7 @@ export function ReframingControls({
 
       {/* Tracking Mode */}
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">Tracking Mode</label>
+        <label className="block text-sm font-medium text-gray-200 mb-2">Tracking Mode</label>
         <div className="grid grid-cols-3 gap-2">
           {(['single', 'multi', 'auto'] as const).map(mode => (
             <button
@@ -79,7 +79,7 @@ export function ReframingControls({
               className={`px-3 py-2 rounded-md text-sm font-medium capitalize transition-colors
                 ${config.trackingMode === mode 
                   ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}`}
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
             >
               {mode}
             </button>
@@ -89,12 +89,12 @@ export function ReframingControls({
 
       {/* Target Selection */}
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">Target Selection</label>
+        <label className="block text-sm font-medium text-gray-200 mb-2">Target Selection</label>
         <select
           value={config.targetSelection}
           onChange={(e) => onConfigChange({ targetSelection: e.target.value as any })}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md 
-                     bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          className="w-full px-3 py-2 border border-gray-600 rounded-md 
+                     bg-gray-700 text-gray-100"
         >
           <option value="largest">Largest Object</option>
           <option value="centered">Most Centered</option>
@@ -106,12 +106,12 @@ export function ReframingControls({
       {/* Manual Track Selection */}
       {config.targetSelection === 'manual' && trackedObjects.length > 0 && (
         <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">Select Track</label>
+          <label className="block text-sm font-medium text-gray-200 mb-2">Select Track</label>
           <select
             value={selectedTrackId || ''}
             onChange={(e) => onTrackSelect(e.target.value || null)}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md 
-                       bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            className="w-full px-3 py-2 border border-gray-600 rounded-md 
+                       bg-gray-700 text-gray-100"
           >
             <option value="">None</option>
             {trackedObjects.map(obj => (
@@ -125,7 +125,7 @@ export function ReframingControls({
 
       {/* Smoothness */}
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-sm font-medium text-gray-200 mb-2">
           Smoothness: {(config.smoothness * 100).toFixed(0)}%
         </label>
         <input
@@ -140,7 +140,7 @@ export function ReframingControls({
 
       {/* Padding */}
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">
+        <label className="block text-sm font-medium text-gray-200 mb-2">
           Padding: {(config.padding * 100).toFixed(0)}%
         </label>
         <input

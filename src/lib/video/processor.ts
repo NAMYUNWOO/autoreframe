@@ -1,4 +1,5 @@
 import { VideoMetadata, Detection, ProcessingStatus } from '@/types';
+import { VideoRotationDetector } from './rotation-detector';
 
 export class VideoProcessor {
   private video: HTMLVideoElement;
@@ -6,6 +7,7 @@ export class VideoProcessor {
   private ctx: CanvasRenderingContext2D;
   private metadata: VideoMetadata | null = null;
   private onProgress?: (status: ProcessingStatus) => void;
+  private videoRotation: number = 0;
 
   constructor() {
     this.video = document.createElement('video');
@@ -21,12 +23,24 @@ export class VideoProcessor {
       const url = URL.createObjectURL(file);
       this.video.src = url;
       
-      this.video.onloadedmetadata = () => {
+      this.video.onloadedmetadata = async () => {
+        // Detect video rotation
+        this.videoRotation = await VideoRotationDetector.detectRotation(this.video);
+        console.log('Detected video rotation:', this.videoRotation);
+        
+        // Get corrected dimensions
+        const correctedDims = VideoRotationDetector.getCorrectedDimensions(
+          this.video.videoWidth,
+          this.video.videoHeight,
+          this.videoRotation
+        );
+        
         this.metadata = {
           duration: this.video.duration,
-          width: this.video.videoWidth,
-          height: this.video.videoHeight,
-          fps: 30 // Default, will be calculated more accurately
+          width: correctedDims.width,
+          height: correctedDims.height,
+          fps: 30, // Default, will be calculated more accurately
+          rotation: this.videoRotation
         };
         
         this.canvas.width = this.metadata.width;
@@ -46,28 +60,59 @@ export class VideoProcessor {
   }
 
   private async estimateFPS(): Promise<number> {
+    // Try to get FPS from video metadata if available
+    const videoTrack = (this.video as any).captureStream?.()?.getVideoTracks()[0];
+    if (videoTrack) {
+      const settings = videoTrack.getSettings();
+      if (settings.frameRate) {
+        return Math.round(settings.frameRate);
+      }
+    }
+    
+    // Fallback to manual detection
     const testDuration = Math.min(1, this.video.duration);
     const startTime = 0;
     let frameCount = 0;
-    let lastTime = 0;
+    let lastTime = -1;
     
     return new Promise((resolve) => {
+      let startRealTime = 0;
+      
       const countFrames = () => {
-        if (this.video.currentTime < startTime + testDuration) {
-          if (this.video.currentTime !== lastTime) {
+        const currentTime = this.video.currentTime;
+        
+        if (!startRealTime) {
+          startRealTime = performance.now();
+        }
+        
+        if (currentTime < startTime + testDuration && this.video.playbackRate > 0) {
+          if (currentTime > lastTime) {
             frameCount++;
-            lastTime = this.video.currentTime;
+            lastTime = currentTime;
           }
           requestAnimationFrame(countFrames);
         } else {
-          const fps = Math.round(frameCount / testDuration);
-          resolve(fps || 30);
+          this.video.pause();
+          const realDuration = (performance.now() - startRealTime) / 1000;
+          const estimatedFps = Math.round(frameCount / realDuration);
+          
+          // Common frame rates
+          const commonFps = [24, 25, 30, 50, 60];
+          const closest = commonFps.reduce((prev, curr) => 
+            Math.abs(curr - estimatedFps) < Math.abs(prev - estimatedFps) ? curr : prev
+          );
+          
+          console.log(`Detected FPS: ${estimatedFps}, using: ${closest}`);
+          resolve(closest);
         }
       };
       
       this.video.currentTime = startTime;
       this.video.play().then(() => {
         countFrames();
+      }).catch(() => {
+        // If play fails, default to 30 fps
+        resolve(30);
       });
     });
   }
@@ -78,7 +123,31 @@ export class VideoProcessor {
       
       this.video.onseeked = () => {
         try {
-          this.ctx.drawImage(this.video, 0, 0);
+          // Clear canvas
+          this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+          
+          // Apply rotation if needed
+          this.ctx.save();
+          
+          if (this.videoRotation !== 0) {
+            VideoRotationDetector.applyRotation(
+              this.ctx, 
+              this.videoRotation, 
+              this.canvas.width, 
+              this.canvas.height
+            );
+          }
+          
+          // Draw the video frame
+          if (this.videoRotation === 90 || this.videoRotation === 270) {
+            // For 90/270 rotation, swap the dimensions when drawing
+            this.ctx.drawImage(this.video, 0, 0, this.video.videoHeight, this.video.videoWidth);
+          } else {
+            this.ctx.drawImage(this.video, 0, 0, this.video.videoWidth, this.video.videoHeight);
+          }
+          
+          this.ctx.restore();
+          
           const imageData = this.ctx.getImageData(0, 0, this.canvas.width, this.canvas.height);
           resolve(imageData);
         } catch (error) {
@@ -108,10 +177,13 @@ export class VideoProcessor {
       const timestamp = frameNumber * frameInterval;
       
       if (this.onProgress) {
+        const isDetectionFrame = frameNumber % 10 === 0; // Match the sample interval
         this.onProgress({
           stage: 'analyzing',
           progress: (frameNumber / totalFrames) * 100,
-          message: `Processing frame ${frameNumber + 1} of ${totalFrames}`
+          message: isDetectionFrame 
+            ? `Detecting heads in frame ${frameNumber + 1} of ${totalFrames}`
+            : `Processing frame ${frameNumber + 1} of ${totalFrames}`
         });
       }
       

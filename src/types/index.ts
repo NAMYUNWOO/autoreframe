@@ -3,6 +3,7 @@ export interface VideoMetadata {
   width: number;
   height: number;
   fps: number;
+  rotation?: number;
 }
 
 export interface BoundingBox {

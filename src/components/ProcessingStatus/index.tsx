@@ -30,35 +30,35 @@ export function ProcessingStatus({ status }: ProcessingStatusProps) {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 max-w-md p-4 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
+    <div className="fixed bottom-4 right-4 max-w-md p-4 bg-gray-800 rounded-lg shadow-lg border border-gray-700">
       <div className="flex items-center space-x-3">
         {status.stage !== 'complete' && status.stage !== 'error' && (
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
         )}
         
         <div className="flex-1">
-          <div className="text-sm font-medium">{getStatusText()}</div>
+          <div className="text-sm font-medium text-white">{getStatusText()}</div>
           {status.message && status.message !== getStatusText() && (
-            <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+            <div className="text-xs text-gray-400 mt-1">
               {status.message}
             </div>
           )}
           {status.error && (
-            <div className="text-xs text-red-600 dark:text-red-400 mt-1">
+            <div className="text-xs text-red-400 mt-1">
               {status.error}
             </div>
           )}
         </div>
         
         {status.progress > 0 && status.stage !== 'complete' && (
-          <div className="text-sm font-medium">
+          <div className="text-sm font-medium text-white">
             {status.progress.toFixed(0)}%
           </div>
         )}
       </div>
       
       {status.progress > 0 && status.stage !== 'complete' && (
-        <div className="mt-2 w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+        <div className="mt-2 w-full bg-gray-700 rounded-full h-2">
           <div
             className={`h-2 rounded-full transition-all duration-300 ${getStatusColor()}`}
             style={{ width: `${status.progress}%` }}

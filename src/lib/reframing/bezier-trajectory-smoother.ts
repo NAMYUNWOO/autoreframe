@@ -87,6 +87,12 @@ export class BezierTrajectorySmoother {
       }
     }
     
+    // Store the first frame position as anchor point
+    const firstPoint = rawPoints[0];
+    const anchorX = firstPoint.headX ?? firstPoint.x;
+    const anchorY = firstPoint.headY ?? firstPoint.y;
+    console.log(`Anchor point (first frame): (${anchorX.toFixed(1)}, ${anchorY.toFixed(1)})`);
+    
     // Step 4: Apply initial smoothing to raw points to remove jitter
     const preSmoothPoints = this.applyMovingAverage(
       rawPoints.map(p => ({
@@ -97,12 +103,24 @@ export class BezierTrajectorySmoother {
       5 // Small window for initial smoothing
     );
     
+    // Restore the first frame to anchor position after smoothing
+    if (preSmoothPoints.length > 0) {
+      preSmoothPoints[0].x = anchorX;
+      preSmoothPoints[0].y = anchorY;
+    }
+    
     // Step 5: Create key points for Bezier curves (every N seconds)
     const keyPoints = this.selectKeyPointsFromSmoothed(preSmoothPoints);
     console.log(`Selected ${keyPoints.length} key points for Bezier curves`);
     
-    // Step 6: Generate Bezier control points
-    const controlPoints = this.generateBezierControlPoints(keyPoints);
+    // Ensure first keypoint is at anchor position
+    if (keyPoints.length > 0) {
+      keyPoints[0].x = anchorX;
+      keyPoints[0].y = anchorY;
+    }
+    
+    // Step 6: Generate Bezier control points with special handling for first segment
+    const controlPoints = this.generateBezierControlPointsWithAnchor(keyPoints, anchorX, anchorY);
     
     // Step 7: Interpolate smooth trajectory using Bezier curves
     const smoothedTrajectory = this.interpolateBezierTrajectory(
@@ -111,8 +129,8 @@ export class BezierTrajectorySmoother {
       rawPoints[rawPoints.length - 1].frame
     );
     
-    // Step 8: Apply final smoothing with larger moving average
-    const finalTrajectory = this.applyMovingAverage(smoothedTrajectory, 30); // 1 second window
+    // Step 8: Apply final smoothing with larger moving average, but preserve first frame
+    const finalTrajectory = this.applyMovingAverageWithAnchor(smoothedTrajectory, 30, rawPoints[0].frame, anchorX, anchorY);
     
     // Step 9: Convert to frame transforms with consistent dimensions
     return this.createFrameTransforms(
@@ -314,6 +332,81 @@ export class BezierTrajectorySmoother {
   }
   
   /**
+   * Generate Bezier control points with special handling for anchor point
+   */
+  private generateBezierControlPointsWithAnchor(keyPoints: ControlPoint[], anchorX: number, anchorY: number): ControlPoint[] {
+    if (keyPoints.length < 2) return keyPoints;
+    
+    const controlPoints: ControlPoint[] = [];
+    
+    // Add first point (anchor)
+    controlPoints.push({
+      frame: keyPoints[0].frame,
+      x: anchorX,
+      y: anchorY
+    });
+    
+    // Generate control points for each segment
+    for (let i = 0; i < keyPoints.length - 1; i++) {
+      const p0 = keyPoints[Math.max(0, i - 1)];
+      const p1 = keyPoints[i];
+      const p2 = keyPoints[i + 1];
+      const p3 = keyPoints[Math.min(keyPoints.length - 1, i + 2)];
+      
+      // For the first segment, ensure smooth departure from anchor
+      if (i === 0) {
+        // First control point starts from anchor position
+        const cp1x = anchorX;
+        const cp1y = anchorY;
+        
+        // Second control point creates smooth transition
+        const cp2x = p2.x - (p2.x - anchorX) * 0.3;
+        const cp2y = p2.y - (p2.y - anchorY) * 0.3;
+        
+        controlPoints.push({
+          frame: p1.frame + (p2.frame - p1.frame) * 0.33,
+          x: cp1x,
+          y: cp1y
+        });
+        
+        controlPoints.push({
+          frame: p1.frame + (p2.frame - p1.frame) * 0.67,
+          x: cp2x,
+          y: cp2y
+        });
+      } else {
+        // Normal tangent calculation for other segments
+        const tension = 0.5;
+        
+        const cp1x = p1.x + (p2.x - p0.x) * tension;
+        const cp1y = p1.y + (p2.y - p0.y) * tension;
+        
+        const cp2x = p2.x - (p3.x - p1.x) * tension;
+        const cp2y = p2.y - (p3.y - p1.y) * tension;
+        
+        controlPoints.push({
+          frame: p1.frame + (p2.frame - p1.frame) * 0.33,
+          x: cp1x,
+          y: cp1y
+        });
+        
+        controlPoints.push({
+          frame: p1.frame + (p2.frame - p1.frame) * 0.67,
+          x: cp2x,
+          y: cp2y
+        });
+      }
+      
+      // Add end point of segment
+      if (i === keyPoints.length - 2) {
+        controlPoints.push(p2);
+      }
+    }
+    
+    return controlPoints;
+  }
+  
+  /**
    * Interpolate smooth trajectory using Bezier curves
    */
   private interpolateBezierTrajectory(
@@ -392,6 +485,54 @@ export class BezierTrajectorySmoother {
         x: sumX / count,
         y: sumY / count
       });
+    }
+    
+    return smoothed;
+  }
+  
+  /**
+   * Apply moving average while preserving anchor point
+   */
+  private applyMovingAverageWithAnchor(
+    trajectory: ControlPoint[], 
+    windowSize: number, 
+    firstFrame: number,
+    anchorX: number,
+    anchorY: number
+  ): ControlPoint[] {
+    const smoothed: ControlPoint[] = [];
+    const halfWindow = Math.floor(windowSize / 2);
+    
+    for (let i = 0; i < trajectory.length; i++) {
+      if (trajectory[i].frame === firstFrame) {
+        // First frame always uses anchor position
+        smoothed.push({
+          frame: trajectory[i].frame,
+          x: anchorX,
+          y: anchorY
+        });
+      } else {
+        // For frames near the beginning, use smaller window
+        const distanceFromFirst = trajectory[i].frame - firstFrame;
+        const adaptiveWindow = distanceFromFirst < 30 ? 
+          Math.min(distanceFromFirst, halfWindow) : halfWindow;
+        
+        let sumX = 0, sumY = 0, count = 0;
+        
+        for (let j = Math.max(0, i - adaptiveWindow); j <= Math.min(trajectory.length - 1, i + adaptiveWindow); j++) {
+          // Give more weight to frames closer to current frame
+          const weight = 1;
+          sumX += trajectory[j].x * weight;
+          sumY += trajectory[j].y * weight;
+          count += weight;
+        }
+        
+        smoothed.push({
+          frame: trajectory[i].frame,
+          x: sumX / count,
+          y: sumY / count
+        });
+      }
     }
     
     return smoothed;

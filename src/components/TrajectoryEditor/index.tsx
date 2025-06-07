@@ -33,6 +33,9 @@ export function TrajectoryEditor({
   const [selectedKeyframe, setSelectedKeyframe] = useState<number | null>(null);
   const [keyframes, setKeyframes] = useState<Set<number>>(new Set());
 
+  // Initialize on mount - moved after drawFrame definition
+  const [isInitialized, setIsInitialized] = useState(false);
+
   // Get output dimensions
   const { width: outputWidth, height: outputHeight } = getOutputDimensions(
     metadata.width,
@@ -181,6 +184,34 @@ export function TrajectoryEditor({
   useEffect(() => {
     drawFrame();
   }, [currentFrame, drawFrame]);
+
+  // Initialize video position on mount
+  useEffect(() => {
+    if (!isInitialized && videoElement && drawFrame) {
+      const initializeVideo = async () => {
+        // Set to frame 0
+        videoElement.currentTime = 0;
+        
+        // Wait for seek to complete
+        await new Promise<void>((resolve) => {
+          const handleSeeked = () => {
+            videoElement.removeEventListener('seeked', handleSeeked);
+            resolve();
+          };
+          videoElement.addEventListener('seeked', handleSeeked);
+          
+          // Timeout fallback in case seeked event doesn't fire
+          setTimeout(resolve, 500);
+        });
+        
+        // Draw the frame
+        drawFrame();
+        setIsInitialized(true);
+      };
+      
+      initializeVideo();
+    }
+  }, [isInitialized, videoElement, drawFrame]);
 
   // Handle mouse events
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {

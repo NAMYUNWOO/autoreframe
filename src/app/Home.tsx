@@ -222,6 +222,24 @@ export default function Home() {
   }, [resetVideo, resetDetection, resetReframing]);
 
 
+  // State to trigger re-renders when video time changes
+  const [, setVideoTime] = useState(0);
+
+  // Listen to video time updates
+  useEffect(() => {
+    const video = getVideoElement();
+    if (!video) return;
+
+    const handleTimeUpdate = () => {
+      setVideoTime(video.currentTime);
+    };
+
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => {
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+    };
+  }, [getVideoElement]);
+
   // Get current frame transform for video player
   const currentTransform = metadata && getVideoElement() 
     ? getFrameTransform(Math.floor(getVideoElement()!.currentTime * metadata.fps))
@@ -325,7 +343,7 @@ export default function Home() {
                   detections={detections}
                   currentTransform={currentTransform}
                   showDetections={showDetections}
-                  showReframing={showReframing && detectionComplete}
+                  showReframing={showReframing && (detectionComplete || transforms.size > 0)}
                   outputRatio={config.outputRatio}
                   reframingConfig={config}
                   initialTargetBox={initialTargetBox}

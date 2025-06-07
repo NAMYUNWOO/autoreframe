@@ -241,6 +241,13 @@ export function VideoPlayer({
     };
   }, [drawOverlay]);
 
+  // Force redraw when showDetections or showReframing changes
+  useEffect(() => {
+    if (!isPlaying) {
+      drawOverlay();
+    }
+  }, [showDetections, showReframing, drawOverlay, isPlaying]);
+
   useEffect(() => {
     if (!metadata || !overlayCanvasRef.current) return;
     

@@ -449,14 +449,29 @@ export class BezierTrajectorySmoother {
       const halfWidth = consistentWidth / 2;
       const halfHeight = consistentHeight / 2;
       
+      // Apply offset if provided
+      let targetX = point.x;
+      let targetY = point.y;
+      
+      if (settings?.reframeBoxOffset) {
+        // The offset represents where the target should be positioned within the reframe box
+        // When the user drags the box right, the target moves left within it
+        // So we need to subtract the offset to get the correct box position
+        targetX -= settings.reframeBoxOffset.x;
+        targetY -= settings.reframeBoxOffset.y;
+      }
+      
       // Clamp position to ensure frame stays within video bounds
-      const clampedX = Math.max(halfWidth, Math.min(frameWidth - halfWidth, point.x));
-      const clampedY = Math.max(halfHeight, Math.min(frameHeight - halfHeight, point.y));
+      const clampedX = Math.max(halfWidth, Math.min(frameWidth - halfWidth, targetX));
+      const clampedY = Math.max(halfHeight, Math.min(frameHeight - halfHeight, targetY));
       
       // Debug logging for specific frames and the last frame
       const isLastFrame = point.frame === trajectory[trajectory.length - 1].frame;
       if (point.frame >= 299 && point.frame <= 300 || isLastFrame) {
         console.log(`Frame ${point.frame}${isLastFrame ? ' (LAST)' : ''}: Transform - center=(${clampedX}, ${clampedY}), scale=${scale}, box size=${consistentWidth}x${consistentHeight}`);
+        if (settings?.reframeBoxOffset) {
+          console.log(`  Offset applied: (${settings.reframeBoxOffset.x}, ${settings.reframeBoxOffset.y})`);
+        }
       }
       
       transforms.set(point.frame, {

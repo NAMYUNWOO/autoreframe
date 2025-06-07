@@ -8,8 +8,10 @@ export interface ReframeDimensions {
 
 export interface ReframingSettings {
   outputRatio: string; // '16:9', '9:16', '1:1', '4:3', '3:4'
-  padding: number; // 1.0 to 2.0
+  padding: number; // 0.0 to 0.5
   smoothness: number; // 0.0 to 1.0
+  reframeBoxSize?: number; // 0.5 to 1.5 (multiplier for box size)
+  reframeBoxOffset?: { x: number; y: number }; // Offset from center
 }
 
 /**
@@ -223,6 +225,23 @@ export class ReframeSizeCalculatorV2 {
     } else {
       adjustedWidth = finalWidth;
       adjustedHeight = finalHeight;
+    }
+    
+    // Apply user-defined box size adjustment if provided
+    if (settings?.reframeBoxSize) {
+      adjustedWidth *= settings.reframeBoxSize;
+      adjustedHeight *= settings.reframeBoxSize;
+      
+      // Ensure it still fits within frame bounds
+      const sizeScale = Math.min(
+        frameWidth / adjustedWidth,
+        frameHeight / adjustedHeight
+      );
+      
+      if (sizeScale < 1) {
+        adjustedWidth *= sizeScale;
+        adjustedHeight *= sizeScale;
+      }
     }
     
     // Recalculate scale based on final dimensions

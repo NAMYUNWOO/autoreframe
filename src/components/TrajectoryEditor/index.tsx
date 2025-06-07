@@ -91,6 +91,9 @@ export function TrajectoryEditor({
         console.log(`  Calculated dimensions: ${cropW.toFixed(0)}x${cropH.toFixed(0)}`);
         console.log(`  Scale from transform: ${transform.scale.toFixed(2)}, dimensions from scale: ${(metadata.width/transform.scale).toFixed(0)}x${(metadata.height/transform.scale).toFixed(0)}`);
         console.log(`  Config: padding=${(reframingConfig.padding * 100).toFixed(0)}%, outputRatio=${reframingConfig.outputRatio}`);
+        if (reframingConfig.reframeBoxOffset) {
+          console.log(`  Offset: x=${reframingConfig.reframeBoxOffset.x}, y=${reframingConfig.reframeBoxOffset.y}`);
+        }
       }
     } else {
       // Fallback to scale-based calculation
@@ -99,6 +102,8 @@ export function TrajectoryEditor({
       console.warn('TrajectoryEditor: No initial target box provided, using scale-based calculation');
     }
     
+    // The transform position is already adjusted by the offset in BezierTrajectorySmoother
+    // So we just use it directly
     const cropX = transform.x - cropW / 2;
     const cropY = transform.y - cropH / 2;
 
@@ -107,11 +112,37 @@ export function TrajectoryEditor({
     overlayCtx.lineWidth = 3;
     overlayCtx.strokeRect(cropX, cropY, cropW, cropH);
 
-    // Draw center point
+    // Draw center point (reframe box center)
     overlayCtx.fillStyle = '#ff0000';
     overlayCtx.beginPath();
     overlayCtx.arc(transform.x, transform.y, 8, 0, Math.PI * 2);
     overlayCtx.fill();
+    
+    // If we have an offset, also draw the original target position
+    if (reframingConfig?.reframeBoxOffset) {
+      const originalTargetX = transform.x + reframingConfig.reframeBoxOffset.x;
+      const originalTargetY = transform.y + reframingConfig.reframeBoxOffset.y;
+      
+      // Draw crosshair at original target position
+      overlayCtx.strokeStyle = '#00ff00';
+      overlayCtx.lineWidth = 2;
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(originalTargetX - 10, originalTargetY);
+      overlayCtx.lineTo(originalTargetX + 10, originalTargetY);
+      overlayCtx.moveTo(originalTargetX, originalTargetY - 10);
+      overlayCtx.lineTo(originalTargetX, originalTargetY + 10);
+      overlayCtx.stroke();
+      
+      // Draw line connecting box center to target
+      overlayCtx.strokeStyle = '#00ff00';
+      overlayCtx.lineWidth = 1;
+      overlayCtx.setLineDash([3, 3]);
+      overlayCtx.beginPath();
+      overlayCtx.moveTo(transform.x, transform.y);
+      overlayCtx.lineTo(originalTargetX, originalTargetY);
+      overlayCtx.stroke();
+      overlayCtx.setLineDash([]);
+    }
 
     // Draw trajectory path
     overlayCtx.strokeStyle = '#00ffff';
@@ -285,6 +316,10 @@ export function TrajectoryEditor({
         <p>• Click to add keyframes (green squares)</p>
         <p>• Drag keyframes to adjust position</p>
         <p>• Yellow box shows current reframe area</p>
+        <p>• Red dot: reframe box center</p>
+        {reframingConfig?.reframeBoxOffset && (
+          <p>• Green crosshair: target person position</p>
+        )}
         <p>• Cyan line shows trajectory path</p>
       </div>
 

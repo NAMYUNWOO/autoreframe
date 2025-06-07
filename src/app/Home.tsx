@@ -25,6 +25,7 @@ export default function Home() {
   const [showTrajectoryEditor, setShowTrajectoryEditor] = useState(false);
   const [selectedTrackIdForByteTrack, setSelectedTrackIdForByteTrack] = useState<string | null>(null);
   const [initialTargetBox, setInitialTargetBox] = useState<{ width: number; height: number } | null>(null);
+  const [startedFromHeadSelector, setStartedFromHeadSelector] = useState(false);
 
   const {
     videoFile,
@@ -203,6 +204,7 @@ export default function Home() {
       updateConfig(reframingConfig);
     }
     setShowHeadSelector(false);
+    setStartedFromHeadSelector(true); // Mark that we started from head selector
     handleDetection();
   }, [handleDetection, updateConfig]);
 
@@ -216,6 +218,7 @@ export default function Home() {
     setShowHeadSelector(false);
     setShowTrajectoryEditor(false);
     setSelectedTrackIdForByteTrack(null);
+    setStartedFromHeadSelector(false);
   }, [resetVideo, resetDetection, resetReframing]);
 
 
@@ -332,14 +335,42 @@ export default function Home() {
 
             {/* Controls */}
             <div className="space-y-4">
-              {/* Head Selector */}
-              {showHeadSelector && (
+              {/* Head Selector - Only show before detection starts */}
+              {showHeadSelector && !isDetecting && (
                 <HeadSelector
                   videoElement={getVideoElement()}
                   onSelectHead={handleHeadSelect}
                   onConfirm={handleHeadSelectorConfirm}
                   confidenceThreshold={confidenceThreshold}
+                  showDetections={showDetections}
+                  onToggleDetections={() => setShowDetections(!showDetections)}
+                  onConfidenceChange={handleConfidenceChange}
                 />
+              )}
+
+              {/* Detection Progress - Show during detection when started from HeadSelector */}
+              {isDetecting && startedFromHeadSelector && (
+                <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
+                  <h3 className="text-lg font-semibold text-white mb-4">Detecting Persons</h3>
+                  <div className="flex items-center space-x-3">
+                    <svg className="animate-spin h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span className="text-gray-300">Processing video frames...</span>
+                  </div>
+                  <div className="mt-4 text-sm text-gray-400">
+                    <p>Detection boxes will appear in the video player{showDetections ? '' : ' (currently hidden)'}.</p>
+                    {!showDetections && (
+                      <button
+                        onClick={() => setShowDetections(true)}
+                        className="mt-2 text-blue-400 hover:text-blue-300 underline"
+                      >
+                        Show detection boxes
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
 
               {/* Object Detection */}
@@ -366,31 +397,33 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Detection Settings */}
-              <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-                <DetectionOverlay
-                  trackedObjects={trackedObjects}
-                  selectedTrackId={selectedTrackId}
-                  showDetections={showDetections}
-                  showReframing={showReframing}
-                  onToggleDetections={() => setShowDetections(!showDetections)}
-                  onToggleReframing={() => setShowReframing(!showReframing)}
-                  confidenceThreshold={confidenceThreshold}
-                  onConfidenceChange={handleConfidenceChange}
-                />
-                {targetDetection && (
-                  <div className="mt-4 text-sm text-blue-400">
-                    <span className="flex items-center space-x-2">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span>Tracking selected person</span>
-                    </span>
-                  </div>
-                )}
-                
-                {/* ByteTrack is always enabled for consistency */}
-              </div>
+              {/* Detection Settings - Only show if not started from HeadSelector */}
+              {detectionComplete && !showHeadSelector && !showTrajectoryEditor && !startedFromHeadSelector && (
+                <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
+                  <DetectionOverlay
+                    trackedObjects={trackedObjects}
+                    selectedTrackId={selectedTrackId}
+                    showDetections={showDetections}
+                    showReframing={showReframing}
+                    onToggleDetections={() => setShowDetections(!showDetections)}
+                    onToggleReframing={() => setShowReframing(!showReframing)}
+                    confidenceThreshold={confidenceThreshold}
+                    onConfidenceChange={handleConfidenceChange}
+                  />
+                  {targetDetection && (
+                    <div className="mt-4 text-sm text-blue-400">
+                      <span className="flex items-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span>Tracking selected person</span>
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* ByteTrack is always enabled for consistency */}
+                </div>
+              )}
 
               {/* Reframing Button - Show after detection is complete */}
               {detectionComplete && !showTrajectoryEditor && (

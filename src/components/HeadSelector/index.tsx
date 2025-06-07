@@ -9,23 +9,40 @@ interface HeadSelectorProps {
   onSelectHead: (box: BoundingBox) => void;
   onConfirm: (reframingConfig?: ReframingConfig) => void;
   confidenceThreshold?: number;
+  showDetections?: boolean;
+  onToggleDetections?: () => void;
+  onConfidenceChange?: (value: number) => void;
 }
 
-export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidenceThreshold = 0.3 }: HeadSelectorProps) {
+export function HeadSelector({ 
+  videoElement, 
+  onSelectHead, 
+  onConfirm, 
+  confidenceThreshold = 0.3,
+  showDetections = true,
+  onToggleDetections,
+  onConfidenceChange
+}: HeadSelectorProps) {
   const [detections, setDetections] = useState<BoundingBox[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'target' | 'reframe'>('target');
+  
   // Reframing settings state
-  const [showReframeSettings, setShowReframeSettings] = useState(false);
   const [reframingConfig, setReframingConfig] = useState<ReframingConfig>({
     outputRatio: '16:9',
     padding: 0.3,
     smoothness: 0.7
   });
   const [currentPreset, setCurrentPreset] = useState<string>('smooth-follow');
+  const [reframeBoxSize, setReframeBoxSize] = useState(1.0); // 1.0 = default size, 0.5 = smaller, 1.5 = larger
+  const [reframeBoxOffset, setReframeBoxOffset] = useState({ x: 0, y: 0 }); // Offset from center
+  const [isDraggingReframeBox, setIsDraggingReframeBox] = useState(false);
+  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
 
   // Apply preset
   const handlePresetChange = (preset: string) => {
@@ -215,13 +232,26 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
   const drawDetections = useCallback((ctx: CanvasRenderingContext2D, detections: BoundingBox[], reframeBox?: { x: number; y: number; width: number; height: number } | null) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     
-    // Draw reframe box first (so it's behind detections)
-    if (reframeBox && selectedIndex !== null) {
-      ctx.strokeStyle = '#ffff00';
+    // Draw reframe box only in reframe tab
+    if (activeTab === 'reframe' && reframeBox && selectedIndex !== null) {
+      // Draw reframe box with draggable appearance
+      ctx.strokeStyle = isDraggingReframeBox ? '#00ffff' : '#ffff00';
       ctx.lineWidth = 3;
       ctx.setLineDash([10, 5]);
       ctx.strokeRect(reframeBox.x, reframeBox.y, reframeBox.width, reframeBox.height);
       ctx.setLineDash([]);
+      
+      // Draw drag handle corners
+      const cornerSize = 10;
+      ctx.fillStyle = isDraggingReframeBox ? '#00ffff' : '#ffff00';
+      // Top-left
+      ctx.fillRect(reframeBox.x - cornerSize/2, reframeBox.y - cornerSize/2, cornerSize, cornerSize);
+      // Top-right
+      ctx.fillRect(reframeBox.x + reframeBox.width - cornerSize/2, reframeBox.y - cornerSize/2, cornerSize, cornerSize);
+      // Bottom-left
+      ctx.fillRect(reframeBox.x - cornerSize/2, reframeBox.y + reframeBox.height - cornerSize/2, cornerSize, cornerSize);
+      // Bottom-right
+      ctx.fillRect(reframeBox.x + reframeBox.width - cornerSize/2, reframeBox.y + reframeBox.height - cornerSize/2, cornerSize, cornerSize);
       
       // Draw center crosshair
       const centerX = reframeBox.x + reframeBox.width / 2;
@@ -237,50 +267,53 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
       ctx.stroke();
     }
     
-    detections.forEach((detection, index) => {
-      const isSelected = index === selectedIndex;
-      
-      // Draw bounding box
-      ctx.strokeStyle = isSelected ? '#00ff00' : '#ff0000';
-      ctx.lineWidth = isSelected ? 4 : 2;
-      ctx.strokeRect(detection.x, detection.y, detection.width, detection.height);
-      
-      // Draw label
-      ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
-      ctx.font = 'bold 16px Arial';
-      const trackIdLabel = detection.trackId ? `ID-${detection.trackId}: ` : '';
-      const label = `${trackIdLabel}person ${(detection.confidence * 100).toFixed(0)}%`;
-      const textMetrics = ctx.measureText(label);
-      
-      ctx.fillRect(
-        detection.x,
-        detection.y - 20,
-        textMetrics.width + 8,
-        20
-      );
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.fillText(label, detection.x + 4, detection.y - 4);
-      
-      // Draw head center if available
-      if (detection.headCenterX && detection.headCenterY) {
-        ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
-        ctx.beginPath();
-        ctx.arc(detection.headCenterX, detection.headCenterY, 5, 0, 2 * Math.PI);
-        ctx.fill();
+    // Only draw detections if showDetections is true
+    if (showDetections) {
+      detections.forEach((detection, index) => {
+        const isSelected = index === selectedIndex;
         
-        // Draw crosshair
+        // Draw bounding box
         ctx.strokeStyle = isSelected ? '#00ff00' : '#ff0000';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(detection.headCenterX - 10, detection.headCenterY);
-        ctx.lineTo(detection.headCenterX + 10, detection.headCenterY);
-        ctx.moveTo(detection.headCenterX, detection.headCenterY - 10);
-        ctx.lineTo(detection.headCenterX, detection.headCenterY + 10);
-        ctx.stroke();
-      }
-    });
-  }, [selectedIndex]);
+        ctx.lineWidth = isSelected ? 4 : 2;
+        ctx.strokeRect(detection.x, detection.y, detection.width, detection.height);
+        
+        // Draw label
+        ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
+        ctx.font = 'bold 16px Arial';
+        const trackIdLabel = detection.trackId ? `ID-${detection.trackId}: ` : '';
+        const label = `${trackIdLabel}person ${(detection.confidence * 100).toFixed(0)}%`;
+        const textMetrics = ctx.measureText(label);
+        
+        ctx.fillRect(
+          detection.x,
+          detection.y - 20,
+          textMetrics.width + 8,
+          20
+        );
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, detection.x + 4, detection.y - 4);
+        
+        // Draw head center if available
+        if (detection.headCenterX && detection.headCenterY) {
+          ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
+          ctx.beginPath();
+          ctx.arc(detection.headCenterX, detection.headCenterY, 5, 0, 2 * Math.PI);
+          ctx.fill();
+          
+          // Draw crosshair
+          ctx.strokeStyle = isSelected ? '#00ff00' : '#ff0000';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(detection.headCenterX - 10, detection.headCenterY);
+          ctx.lineTo(detection.headCenterX + 10, detection.headCenterY);
+          ctx.moveTo(detection.headCenterX, detection.headCenterY - 10);
+          ctx.lineTo(detection.headCenterX, detection.headCenterY + 10);
+          ctx.stroke();
+        }
+      });
+    }
+  }, [selectedIndex, activeTab, isDraggingReframeBox, showDetections]);
 
   // Calculate reframe box preview
   const calculateReframeBox = useCallback(() => {
@@ -306,17 +339,33 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
       reframingConfig
     );
     
-    // Calculate position centered on the person (or their head if available)
-    const centerX = selectedBox.headCenterX || (selectedBox.x + selectedBox.width / 2);
-    const centerY = selectedBox.headCenterY || (selectedBox.y + selectedBox.height / 2);
+    // Apply size adjustment
+    const adjustedWidth = reframeDimensions.width * reframeBoxSize;
+    const adjustedHeight = reframeDimensions.height * reframeBoxSize;
+    
+    // Calculate base position centered on the person (or their head if available)
+    const targetCenterX = selectedBox.headCenterX || (selectedBox.x + selectedBox.width / 2);
+    const targetCenterY = selectedBox.headCenterY || (selectedBox.y + selectedBox.height / 2);
+    
+    // Apply offset to position the target within the reframe box
+    const boxCenterX = targetCenterX - reframeBoxOffset.x;
+    const boxCenterY = targetCenterY - reframeBoxOffset.y;
+    
+    // Calculate top-left corner
+    const x = boxCenterX - adjustedWidth / 2;
+    const y = boxCenterY - adjustedHeight / 2;
+    
+    // Ensure box stays within frame bounds
+    const clampedX = Math.max(0, Math.min(frameWidth - adjustedWidth, x));
+    const clampedY = Math.max(0, Math.min(frameHeight - adjustedHeight, y));
     
     return {
-      x: centerX - reframeDimensions.width / 2,
-      y: centerY - reframeDimensions.height / 2,
-      width: reframeDimensions.width,
-      height: reframeDimensions.height
+      x: clampedX,
+      y: clampedY,
+      width: adjustedWidth,
+      height: adjustedHeight
     };
-  }, [selectedIndex, detections, reframingConfig]);
+  }, [selectedIndex, detections, reframingConfig, reframeBoxSize, reframeBoxOffset]);
 
   // Update overlay when settings change
   useEffect(() => {
@@ -327,38 +376,76 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
     
     const reframeBox = calculateReframeBox();
     drawDetections(ctx, detections, reframeBox);
-  }, [detections, drawDetections, calculateReframeBox, showReframeSettings]);
+  }, [detections, drawDetections, calculateReframeBox, activeTab, reframeBoxSize, reframeBoxOffset]);
 
-  // Handle canvas click
-  const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!overlayCanvasRef.current || detections.length === 0) return;
+  // Handle canvas mouse down
+  const handleCanvasMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!overlayCanvasRef.current) return;
 
     const rect = overlayCanvasRef.current.getBoundingClientRect();
     const x = (event.clientX - rect.left) / rect.width * overlayCanvasRef.current.width;
     const y = (event.clientY - rect.top) / rect.height * overlayCanvasRef.current.height;
 
-    // Find clicked detection
-    for (let i = 0; i < detections.length; i++) {
-      const det = detections[i];
-      if (
-        x >= det.x &&
-        x <= det.x + det.width &&
-        y >= det.y &&
-        y <= det.y + det.height
-      ) {
-        setSelectedIndex(i);
-        onSelectHead(det);
-        setShowReframeSettings(true); // Show settings when person is selected
-        
-        // Redraw with selection
-        const ctx = overlayCanvasRef.current.getContext('2d');
-        if (ctx) {
-          const reframeBox = calculateReframeBox();
-          drawDetections(ctx, detections, reframeBox);
+    if (activeTab === 'target') {
+      // In target tab, select a person
+      for (let i = 0; i < detections.length; i++) {
+        const det = detections[i];
+        if (
+          x >= det.x &&
+          x <= det.x + det.width &&
+          y >= det.y &&
+          y <= det.y + det.height
+        ) {
+          setSelectedIndex(i);
+          onSelectHead(det);
+          
+          // Redraw with selection
+          const ctx = overlayCanvasRef.current.getContext('2d');
+          if (ctx) {
+            drawDetections(ctx, detections, null);
+          }
+          break;
         }
-        break;
+      }
+    } else if (activeTab === 'reframe' && selectedIndex !== null) {
+      // In reframe tab, check if clicking on reframe box to drag it
+      const reframeBox = calculateReframeBox();
+      if (reframeBox && 
+          x >= reframeBox.x && 
+          x <= reframeBox.x + reframeBox.width &&
+          y >= reframeBox.y && 
+          y <= reframeBox.y + reframeBox.height) {
+        setIsDraggingReframeBox(true);
+        setDragStartPos({ x, y });
       }
     }
+  };
+
+  // Handle mouse move for dragging
+  const handleCanvasMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDraggingReframeBox || !overlayCanvasRef.current || selectedIndex === null) return;
+
+    const rect = overlayCanvasRef.current.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / rect.width * overlayCanvasRef.current.width;
+    const y = (event.clientY - rect.top) / rect.height * overlayCanvasRef.current.height;
+
+    // Calculate the movement delta
+    const deltaX = x - dragStartPos.x;
+    const deltaY = y - dragStartPos.y;
+
+    // Update the reframe box offset
+    // Note: We invert the delta because moving the box right means the target moves left within it
+    setReframeBoxOffset(prev => ({
+      x: prev.x - deltaX,
+      y: prev.y - deltaY
+    }));
+
+    setDragStartPos({ x, y });
+  };
+
+  // Handle mouse up
+  const handleCanvasMouseUp = () => {
+    setIsDraggingReframeBox(false);
   };
 
   // Auto-detect on mount
@@ -370,7 +457,14 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
 
   const handleConfirm = () => {
     if (selectedIndex !== null) {
-      onConfirm(reframingConfig);
+      // Include the box size and offset in the config
+      const enhancedConfig = {
+        ...reframingConfig,
+        // Store these as custom properties
+        reframeBoxSize,
+        reframeBoxOffset
+      };
+      onConfirm(enhancedConfig);
     }
   };
 
@@ -378,11 +472,90 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
     <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
       <h3 className="text-lg font-semibold text-white mb-4">Select Target Person & Configure Reframing</h3>
       
-      <div className="mb-4 text-sm text-gray-300">
-        <p>1. Click on the person you want to track (green = selected)</p>
-        <p>2. Adjust the reframe settings below</p>
-        <p>3. Yellow box shows the reframe preview</p>
+      {/* Tab Navigation */}
+      <div className="flex border-b border-white/20 mb-4">
+        <button
+          onClick={() => setActiveTab('target')}
+          className={`px-4 py-2 text-sm font-medium transition-colors ${
+            activeTab === 'target' 
+              ? 'text-white border-b-2 border-blue-500' 
+              : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Target Selection
+        </button>
+        <button
+          onClick={() => selectedIndex !== null && setActiveTab('reframe')}
+          disabled={selectedIndex === null}
+          className={`px-4 py-2 text-sm font-medium transition-colors ml-4 ${
+            activeTab === 'reframe' 
+              ? 'text-white border-b-2 border-blue-500' 
+              : selectedIndex === null
+                ? 'text-gray-600 cursor-not-allowed'
+                : 'text-gray-400 hover:text-white'
+          }`}
+        >
+          Reframe Settings
+        </button>
       </div>
+
+      {/* Tab Content */}
+      {activeTab === 'target' && (
+        <>
+          <div className="mb-4 text-sm text-gray-300">
+            <p>Click on a person to select them for tracking.</p>
+            <p>Selected person will be highlighted with a green border.</p>
+          </div>
+          
+          {/* Detection Settings */}
+          <div className="mb-4 p-4 bg-black/20 rounded-lg border border-white/5">
+            <h4 className="text-md font-semibold text-white mb-3">Detection Settings</h4>
+            
+            {/* Show/Hide Detections */}
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm text-gray-300">Show Detections</span>
+              <button
+                onClick={onToggleDetections}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  showDetections ? 'bg-blue-600' : 'bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    showDetections ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+            
+            {/* Confidence Threshold */}
+            {onConfidenceChange && (
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-1">
+                  Confidence Threshold: {(confidenceThreshold * 100).toFixed(0)}%
+                </label>
+                <input
+                  type="range"
+                  min="1"
+                  max="100"
+                  value={confidenceThreshold * 100}
+                  onChange={(e) => onConfidenceChange(parseFloat(e.target.value) / 100)}
+                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                />
+                <div className="text-xs text-gray-400 mt-1">
+                  Lower values detect more objects but may include false positives
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+      
+      {activeTab === 'reframe' && (
+        <div className="mb-4 text-sm text-gray-300">
+          <p>Adjust reframe settings and drag the yellow box to position the target.</p>
+        </div>
+      )}
 
       <div 
         className="relative mb-4 bg-black rounded-lg overflow-hidden flex items-center justify-center"
@@ -398,9 +571,15 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
         />
         <canvas
           ref={overlayCanvasRef}
-          className="absolute inset-0 w-full h-full cursor-pointer"
+          className={`absolute inset-0 w-full h-full ${
+            activeTab === 'target' ? 'cursor-pointer' : 
+            activeTab === 'reframe' && selectedIndex !== null ? 'cursor-move' : 'cursor-default'
+          }`}
           style={{ objectFit: 'contain' }}
-          onClick={handleCanvasClick}
+          onMouseDown={handleCanvasMouseDown}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseUp={handleCanvasMouseUp}
+          onMouseLeave={handleCanvasMouseUp}
         />
         
         {isDetecting && (
@@ -425,11 +604,9 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
         </div>
       )}
 
-      {/* Reframing Settings - Show when person is selected */}
-      {showReframeSettings && selectedIndex !== null && (
+      {/* Reframing Settings - Show in reframe tab */}
+      {activeTab === 'reframe' && selectedIndex !== null && (
         <div className="space-y-4 p-4 bg-black/20 rounded-lg border border-white/5">
-          <h4 className="text-md font-semibold text-white">Reframing Settings</h4>
-          
           {/* Preset Selection */}
           <div>
             <label className="block text-sm font-medium text-gray-200 mb-1">Preset</label>
@@ -482,36 +659,39 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
             />
           </div>
 
-          {/* Padding */}
+          {/* Reframe Box Size */}
           <div>
             <label className="block text-sm font-medium text-gray-200 mb-1">
-              Padding: {(reframingConfig.padding * 100).toFixed(0)}%
+              Reframe Box Size: {(reframeBoxSize * 100).toFixed(0)}%
             </label>
             <input
               type="range"
-              min="0"
-              max="50"
-              value={reframingConfig.padding * 100}
-              onChange={(e) => updateReframingConfig({ padding: parseFloat(e.target.value) / 100 })}
+              min="50"
+              max="150"
+              value={reframeBoxSize * 100}
+              onChange={(e) => setReframeBoxSize(parseFloat(e.target.value) / 100)}
               className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
             />
           </div>
 
           <div className="text-xs text-gray-400 pt-2">
             <p>• Smoothness: Higher = smoother camera movement</p>
-            <p>• Padding: Higher = more space around subject</p>
+            <p>• Box Size: Adjust the zoom level (100% = default)</p>
+            <p>• Drag the yellow box to reposition the target within the frame</p>
           </div>
         </div>
       )}
 
       <button
         onClick={handleConfirm}
-        disabled={selectedIndex === null}
+        disabled={selectedIndex === null || activeTab !== 'reframe'}
         className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-lg
                    hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed
                    transition-all transform hover:scale-[1.02] mt-4"
       >
-        Confirm Selection & Start Detection
+        {selectedIndex === null ? 'Select a Person First' : 
+         activeTab !== 'reframe' ? 'Configure Reframe Settings First' :
+         'Confirm Selection & Start Detection'}
       </button>
     </div>
   );

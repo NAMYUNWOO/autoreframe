@@ -60,9 +60,14 @@ export function TrajectoryEditor({
       rotation: 0
     };
 
-    // Calculate crop rectangle
-    const cropW = outputWidth / transform.scale;
-    const cropH = outputHeight / transform.scale;
+    // Calculate crop rectangle - maintain consistent aspect ratio
+    const aspectRatio = outputWidth / outputHeight;
+    
+    // Calculate consistent dimensions based on scale
+    const frameArea = metadata.width / transform.scale;
+    const cropW = frameArea;
+    const cropH = frameArea / aspectRatio;
+    
     const cropX = transform.x - cropW / 2;
     const cropY = transform.y - cropH / 2;
 
@@ -120,10 +125,8 @@ export function TrajectoryEditor({
     if (!overlayCanvasRef.current) return;
 
     const rect = overlayCanvasRef.current.getBoundingClientRect();
-    const scaleX = metadata.width / rect.width;
-    const scaleY = metadata.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const x = (e.clientX - rect.left) / rect.width * metadata.width;
+    const y = (e.clientY - rect.top) / rect.height * metadata.height;
 
     // Check if clicking on a keyframe
     let clickedKeyframe: number | null = null;
@@ -150,10 +153,8 @@ export function TrajectoryEditor({
     if (!isDragging || selectedKeyframe === null || !overlayCanvasRef.current) return;
 
     const rect = overlayCanvasRef.current.getBoundingClientRect();
-    const scaleX = metadata.width / rect.width;
-    const scaleY = metadata.height / rect.height;
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const x = (e.clientX - rect.left) / rect.width * metadata.width;
+    const y = (e.clientY - rect.top) / rect.height * metadata.height;
 
     // Update transform
     const currentTransform = transforms.get(selectedKeyframe) || {
@@ -239,20 +240,26 @@ export function TrajectoryEditor({
         <p>• Cyan line shows trajectory path</p>
       </div>
 
-      <div className="relative mb-4 bg-black rounded-lg overflow-hidden">
+      <div 
+        className="relative mb-4 bg-black rounded-lg overflow-hidden flex items-center justify-center"
+        style={{ 
+          maxHeight: 'calc(100vh - 500px)',
+          aspectRatio: `${metadata.width}/${metadata.height}`
+        }}
+      >
         <canvas
           ref={canvasRef}
           width={metadata.width}
           height={metadata.height}
-          className="w-full h-full"
-          style={{ maxHeight: '400px', objectFit: 'contain' }}
+          className="absolute inset-0 w-full h-full"
+          style={{ objectFit: 'contain' }}
         />
         <canvas
           ref={overlayCanvasRef}
           width={metadata.width}
           height={metadata.height}
-          className="absolute top-0 left-0 w-full h-full cursor-crosshair"
-          style={{ maxHeight: '400px', objectFit: 'contain' }}
+          className="absolute inset-0 w-full h-full cursor-crosshair"
+          style={{ objectFit: 'contain' }}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}

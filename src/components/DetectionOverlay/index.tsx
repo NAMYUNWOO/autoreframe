@@ -59,10 +59,18 @@ export function DetectionOverlay({
           type="range"
           min="0"
           max="100"
+          step="5"
           value={confidenceThreshold * 100}
-          onChange={(e) => onConfidenceChange(parseFloat(e.target.value) / 100)}
+          onChange={(e) => {
+            const value = parseFloat(e.target.value) / 100;
+            console.log(`DetectionOverlay: Slider changed to ${e.target.value}% (${value})`);
+            onConfidenceChange(value);
+          }}
           className="w-full"
         />
+        <div className="text-xs text-gray-400 mt-1">
+          Current value: {confidenceThreshold.toFixed(2)} ({(confidenceThreshold * 100).toFixed(0)}%)
+        </div>
       </div>
 
       {/* Tracked Objects Summary */}

@@ -68,60 +68,20 @@ export function ReframingControls({
         </div>
       </div>
 
-      {/* Tracking Mode */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-200 mb-2">Tracking Mode</label>
-        <div className="grid grid-cols-3 gap-2">
-          {(['single', 'multi', 'auto'] as const).map(mode => (
-            <button
-              key={mode}
-              onClick={() => onConfigChange({ trackingMode: mode })}
-              className={`px-3 py-2 rounded-md text-sm font-medium capitalize transition-colors
-                ${config.trackingMode === mode 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-            >
-              {mode}
-            </button>
-          ))}
-        </div>
-      </div>
 
-      {/* Target Selection */}
+      {/* Selected Track Display */}
       <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-200 mb-2">Target Selection</label>
-        <select
-          value={config.targetSelection}
-          onChange={(e) => onConfigChange({ targetSelection: e.target.value as any })}
-          className="w-full px-3 py-2 border border-gray-600 rounded-md 
-                     bg-gray-700 text-gray-100"
-        >
-          <option value="largest">Largest Object</option>
-          <option value="centered">Most Centered</option>
-          <option value="most-confident">Most Confident</option>
-          <option value="manual">Manual Selection</option>
-        </select>
-      </div>
-
-      {/* Manual Track Selection */}
-      {config.targetSelection === 'manual' && trackedObjects.length > 0 && (
-        <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-200 mb-2">Select Track</label>
-          <select
-            value={selectedTrackId || ''}
-            onChange={(e) => onTrackSelect(e.target.value || null)}
-            className="w-full px-3 py-2 border border-gray-600 rounded-md 
-                       bg-gray-700 text-gray-100"
-          >
-            <option value="">None</option>
-            {trackedObjects.map(obj => (
-              <option key={obj.id} value={obj.id}>
-                {obj.label} (Track {obj.id.split('_')[1]})
-              </option>
-            ))}
-          </select>
+        <label className="block text-sm font-medium text-gray-200 mb-2">Selected Person</label>
+        <div className="px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100">
+          {selectedTrackId && trackedObjects.length > 0 ? (() => {
+            const selected = trackedObjects.find(obj => obj.id === selectedTrackId);
+            return selected ? `${selected.label} (Track ID: ${selected.id})` : 'No person selected';
+          })() : 'No person selected'}
         </div>
-      )}
+        {!selectedTrackId && (
+          <p className="mt-1 text-sm text-yellow-400">Please select a person to track before applying reframing</p>
+        )}
+      </div>
 
       {/* Smoothness */}
       <div className="mb-6">
@@ -156,12 +116,14 @@ export function ReframingControls({
       {/* Process Button */}
       <button
         onClick={onProcess}
-        disabled={isProcessing}
+        disabled={isProcessing || !selectedTrackId}
         className="w-full py-3 px-4 bg-green-500 text-white font-medium rounded-md
                    hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed
                    transition-colors"
       >
-        {isProcessing ? 'Processing...' : 'Apply Reframing'}
+        {isProcessing ? 'Processing...' : 
+         !selectedTrackId ? 'Select a Person First' : 
+         'Apply Reframing'}
       </button>
     </div>
   );

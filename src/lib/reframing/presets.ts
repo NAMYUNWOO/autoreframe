@@ -15,56 +15,56 @@ export const REFRAMING_PRESETS: Record<string, ReframingConfig> = {
     trackingMode: 'single',
     smoothness: 0.85,
     padding: 0.15,
-    targetSelection: 'largest'
+    targetSelection: 'manual'
   },
   'youtube-short': {
     outputRatio: '9:16',
     trackingMode: 'single',
     smoothness: 0.8,
     padding: 0.2,
-    targetSelection: 'centered'
+    targetSelection: 'manual'
   },
   'instagram-post': {
     outputRatio: '1:1',
     trackingMode: 'single',
     smoothness: 0.9,
     padding: 0.1,
-    targetSelection: 'centered'
+    targetSelection: 'manual'
   },
   'tiktok': {
     outputRatio: '9:16',
     trackingMode: 'single',
     smoothness: 0.75,
     padding: 0.15,
-    targetSelection: 'largest'
+    targetSelection: 'manual'
   },
   'landscape-to-portrait': {
     outputRatio: '9:16',
     trackingMode: 'auto',
     smoothness: 0.8,
     padding: 0.2,
-    targetSelection: 'most-confident'
+    targetSelection: 'manual'
   },
   'portrait-to-landscape': {
     outputRatio: '16:9',
     trackingMode: 'auto',
     smoothness: 0.85,
     padding: 0.25,
-    targetSelection: 'centered'
+    targetSelection: 'manual'
   },
   'zoom-meeting': {
     outputRatio: '16:9',
     trackingMode: 'single',
     smoothness: 0.95,
     padding: 0.3,
-    targetSelection: 'largest'
+    targetSelection: 'manual'
   },
   'presentation': {
     outputRatio: '16:9',
     trackingMode: 'single',
     smoothness: 0.98,
     padding: 0.4,
-    targetSelection: 'centered'
+    targetSelection: 'manual'
   }
 };
 

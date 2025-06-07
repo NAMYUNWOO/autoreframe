@@ -27,7 +27,7 @@ export function useReframing() {
 
   // Initialize reframing engine
   useEffect(() => {
-    engineRef.current = new ReframingEngine(config);
+    // Engine will be created with ByteTrack flag when processing
   }, []);
 
   // Update engine when config changes
@@ -42,9 +42,8 @@ export function useReframing() {
     selectedTrack: TrackedObject | null,
     metadata: VideoMetadata
   ) => {
-    if (!engineRef.current) {
-      throw new Error('Reframing engine not initialized');
-    }
+    // Create new engine (always uses ByteTrack)
+    engineRef.current = new ReframingEngine(config, true);
 
     setIsProcessing(true);
     try {
@@ -52,7 +51,8 @@ export function useReframing() {
         detections,
         selectedTrack,
         metadata.width,
-        metadata.height
+        metadata.height,
+        metadata.fps
       );
       
       setTransforms(frameTransforms);
@@ -60,7 +60,7 @@ export function useReframing() {
     } finally {
       setIsProcessing(false);
     }
-  }, []);
+  }, [config]);
 
   const updateConfig = useCallback((updates: Partial<ReframingConfig>) => {
     setConfig(prev => ({ ...prev, ...updates }));

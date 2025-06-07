@@ -77,19 +77,36 @@ export function VideoPlayer({
       const detection = detections.find(d => d.frameNumber === frameNumber);
       if (detection) {
         detection.boxes.forEach(box => {
+          // Set color based on track ID
+          let boxColor = '#00ff00';
+          let bgColor = 'rgba(0, 255, 0, 0.8)';
+          
+          if (box.trackId) {
+            const trackNum = parseInt(box.trackId);
+            const hue = (trackNum * 137.508) % 360; // Golden angle for distinct colors
+            boxColor = `hsl(${hue}, 70%, 50%)`;
+            bgColor = `hsla(${hue}, 70%, 50%, 0.8)`;
+          }
+          
           // Draw bounding box
-          ctx.strokeStyle = '#00ff00';
+          ctx.strokeStyle = boxColor;
           ctx.lineWidth = 2;
           ctx.strokeRect(box.x, box.y, box.width, box.height);
           
           // Draw label with background
-          const label = `${box.class} ${(box.confidence * 100).toFixed(0)}%`;
+          const trackIdLabel = box.trackId ? `ID:${box.trackId} ` : '';
+          const label = `${trackIdLabel}${box.class} ${(box.confidence * 100).toFixed(0)}%`;
+          
+          // Debug: Log confidence values for frame 213
+          if (frameNumber === 213) {
+            console.log(`Frame 213: VideoPlayer - trackId=${box.trackId}, raw confidence=${box.confidence}, displayed as ${(box.confidence * 100).toFixed(0)}%`);
+          }
           ctx.font = 'bold 14px Arial';
           const textMetrics = ctx.measureText(label);
           const padding = 4;
           
           // Label background
-          ctx.fillStyle = 'rgba(0, 255, 0, 0.8)';
+          ctx.fillStyle = bgColor;
           ctx.fillRect(
             box.x, 
             box.y - 22, 
@@ -98,8 +115,43 @@ export function VideoPlayer({
           );
           
           // Label text
-          ctx.fillStyle = 'black';
+          ctx.fillStyle = 'white';
           ctx.fillText(label, box.x + padding, box.y - 6);
+          
+          // Draw head center if available
+          if (box.headCenterX !== undefined && box.headCenterY !== undefined) {
+            // Draw head center point
+            ctx.fillStyle = boxColor;
+            ctx.beginPath();
+            ctx.arc(box.headCenterX, box.headCenterY, 6, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // Draw head center crosshair
+            ctx.strokeStyle = boxColor;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            // Horizontal line
+            ctx.moveTo(box.headCenterX - 15, box.headCenterY);
+            ctx.lineTo(box.headCenterX + 15, box.headCenterY);
+            // Vertical line
+            ctx.moveTo(box.headCenterX, box.headCenterY - 15);
+            ctx.lineTo(box.headCenterX, box.headCenterY + 15);
+            ctx.stroke();
+            
+            // Draw "HEAD" label
+            ctx.fillStyle = bgColor;
+            ctx.font = 'bold 12px Arial';
+            const headLabel = 'HEAD';
+            const headMetrics = ctx.measureText(headLabel);
+            ctx.fillRect(
+              box.headCenterX - headMetrics.width / 2 - 4,
+              box.headCenterY - 25,
+              headMetrics.width + 8,
+              16
+            );
+            ctx.fillStyle = 'white';
+            ctx.fillText(headLabel, box.headCenterX - headMetrics.width / 2, box.headCenterY - 12);
+          }
         });
       }
     }
@@ -110,17 +162,24 @@ export function VideoPlayer({
       ctx.lineWidth = 3;
       ctx.setLineDash([10, 5]);
       
-      // Calculate reframing rectangle
+      // Calculate reframing rectangle with consistent dimensions
       const aspectRatio = outputRatio === '16:9' ? 16/9 : 
                          outputRatio === '9:16' ? 9/16 : 
                          outputRatio === '1:1' ? 1 : 
                          outputRatio === '4:3' ? 4/3 : 3/4;
       
-      const width = metadata.width / currentTransform.scale;
-      const height = width / aspectRatio;
+      // Maintain consistent dimensions based on scale
+      const frameArea = metadata.width / currentTransform.scale;
+      const width = frameArea;
+      const height = frameArea / aspectRatio;
       
       const x = currentTransform.x - width / 2;
       const y = currentTransform.y - height / 2;
+      
+      // Debug log for frames 299-300
+      if (frameNumber >= 299 && frameNumber <= 300) {
+        console.log(`VideoPlayer Frame ${frameNumber}: Reframe box ${width}x${height} at (${x}, ${y}), scale=${currentTransform.scale}`);
+      }
       
       ctx.strokeRect(x, y, width, height);
       ctx.setLineDash([]);
@@ -184,7 +243,13 @@ export function VideoPlayer({
 
   return (
     <div className="w-full">
-      <div className="relative bg-black rounded-xl overflow-hidden" style={{ aspectRatio: '16/9' }}>
+      <div 
+        className="relative bg-black rounded-xl overflow-hidden" 
+        style={{ 
+          aspectRatio: metadata ? `${metadata.width}/${metadata.height}` : '16/9',
+          maxHeight: 'calc(100vh - 300px)'
+        }}
+      >
         <div ref={containerRef} className="absolute inset-0" />
         <canvas
           ref={overlayCanvasRef}

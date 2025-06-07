@@ -7,9 +7,10 @@ interface HeadSelectorProps {
   videoElement: HTMLVideoElement | null;
   onSelectHead: (box: BoundingBox) => void;
   onConfirm: () => void;
+  confidenceThreshold?: number;
 }
 
-export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSelectorProps) {
+export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidenceThreshold = 0.3 }: HeadSelectorProps) {
   const [detections, setDetections] = useState<BoundingBox[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
@@ -44,7 +45,7 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
     ctx.drawImage(videoElement, 0, 0);
     console.log('Canvas size:', canvas.width, 'x', canvas.height);
 
-    // Import and run YOLO detection
+    // Import and run detection
     try {
       console.log('Importing PersonYOLODetector...');
       const { PersonYOLODetector } = await import('@/lib/detection/person-yolo');
@@ -53,26 +54,134 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
       console.log('Initializing detector...');
       await detector.initialize();
       
+      // Set a lower threshold for initial detection to ensure we catch all persons
+      detector.setConfidenceThreshold(0.3);
+      
       console.log('Running detection on first frame...');
       const personDetections = await detector.detect(canvas);
-      console.log('Detections found:', personDetections.length);
+      console.log('Raw detections found:', personDetections.length);
       
-      setDetections(personDetections);
+      // Always use ByteTracker for consistency
+      console.log('Applying ByteTracker...');
+      const { ByteTracker } = await import('@/lib/detection/bytetrack-proper/byte-tracker');
+      const byteTracker = new ByteTracker({
+        trackThresh: confidenceThreshold,
+        trackBuffer: 30,
+        matchThresh: 0.8,
+        minBoxArea: 100,
+        lowThresh: Math.max(0.1, confidenceThreshold * 0.5)
+      });
+      console.log('HeadSelector: ByteTracker using threshold', confidenceThreshold);
+      
+      // Process first frame with ByteTracker
+      const finalDetections = byteTracker.update(personDetections);
+      console.log('ByteTracker detections:', finalDetections.length);
+        
+        // Try to detect heads for each person
+        const useHeadDetection = false; // Disable head detection - model not reliable
+        
+        if (useHeadDetection) {
+          try {
+            console.log('Initializing head detector...');
+            const { HeadDetector } = await import('@/lib/detection/head-detector');
+            const headDetector = new HeadDetector();
+            await headDetector.initialize();
+            
+            console.log('Detecting heads in tracked persons...');
+            for (const detection of finalDetections) {
+              const headResult = await headDetector.detectHeadInBox(
+                canvas,
+                detection,
+                0.05 // 5% padding
+              );
+              
+              if (headResult) {
+                // Add head center to detection
+                detection.headCenterX = headResult.x + headResult.width / 2;
+                detection.headCenterY = headResult.y + headResult.height / 2;
+                console.log(`Head detected for track ${detection.trackId}:`);
+                console.log(`  Person box: (${detection.x}, ${detection.y}, ${detection.width}, ${detection.height})`);
+                console.log(`  Head box: (${headResult.x}, ${headResult.y}, ${headResult.width}, ${headResult.height})`);
+                console.log(`  Head center: (${detection.headCenterX}, ${detection.headCenterY})`);
+                
+                // Verify head is within person box
+                if (detection.headCenterX < detection.x || 
+                    detection.headCenterX > detection.x + detection.width ||
+                    detection.headCenterY < detection.y || 
+                    detection.headCenterY > detection.y + detection.height) {
+                  console.warn(`WARNING: Head center is outside person box!`);
+                }
+              } else {
+                // Smart head position estimation based on box aspect ratio
+                const aspectRatio = detection.width / detection.height;
+                
+                if (aspectRatio > 1.5) {
+                  // Wide box - person likely horizontal (like figure skating)
+                  // For figure skating, head is typically at the left side when horizontal
+                  detection.headCenterX = detection.x + detection.width * 0.15; // Head at left end
+                  detection.headCenterY = detection.y + detection.height * 0.5;
+                  console.log(`Head estimated for horizontal pose (figure skating), track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
+                } else {
+                  // Normal standing pose
+                  detection.headCenterX = detection.x + detection.width / 2;
+                  detection.headCenterY = detection.y + detection.height * 0.25;
+                  console.log(`Head estimated for track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
+                }
+              }
+            }
+            
+            headDetector.dispose();
+          } catch (headError) {
+            console.warn('Head detection failed, using estimates:', headError);
+            // Use estimated head positions
+            for (const detection of finalDetections) {
+              const aspectRatio = detection.width / detection.height;
+              if (aspectRatio > 1.5) {
+                detection.headCenterX = detection.x + detection.width * 0.15;
+                detection.headCenterY = detection.y + detection.height * 0.5;
+              } else {
+                detection.headCenterX = detection.x + detection.width / 2;
+                detection.headCenterY = detection.y + detection.height * 0.25;
+              }
+            }
+          }
+        } else {
+          // Use estimated head positions when head detection is disabled
+          console.log('Using estimated head positions (head detection disabled)');
+          for (const detection of finalDetections) {
+            const aspectRatio = detection.width / detection.height;
+            if (aspectRatio > 1.5) {
+              detection.headCenterX = detection.x + detection.width * 0.15;
+              detection.headCenterY = detection.y + detection.height * 0.5;
+              console.log(`Head estimated for horizontal pose, track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
+            } else {
+              detection.headCenterX = detection.x + detection.width / 2;
+              detection.headCenterY = detection.y + detection.height * 0.25;
+              console.log(`Head estimated for track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
+            }
+          }
+        }
+      
+      setDetections(finalDetections);
       detector.dispose();
 
       // Draw detections
-      if (personDetections.length > 0) {
-        drawDetections(overlayCtx, personDetections);
+      if (finalDetections.length > 0) {
+        drawDetections(overlayCtx, finalDetections);
       } else {
         console.warn('No persons detected in the first frame');
       }
     } catch (error) {
       console.error('Failed to detect persons:', error);
-      alert('Failed to detect persons in the first frame. Please try a different video or ensure there are visible people in the first frame.');
+      if (error instanceof Error) {
+        alert(`Failed to detect persons: ${error.message}`);
+      } else {
+        alert('Failed to detect persons in the first frame. Please try a different video or ensure there are visible people in the first frame.');
+      }
     } finally {
       setIsDetecting(false);
     }
-  }, [videoElement]);
+  }, [videoElement, onSelectHead, confidenceThreshold]);
 
   // Draw detection boxes
   const drawDetections = (ctx: CanvasRenderingContext2D, detections: BoundingBox[]) => {
@@ -89,7 +198,8 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
       // Draw label
       ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
       ctx.font = 'bold 16px Arial';
-      const label = `Person ${index + 1} (${(detection.confidence * 100).toFixed(0)}%)`;
+      const trackIdLabel = detection.trackId ? `ID-${detection.trackId}: ` : '';
+      const label = `${trackIdLabel}person ${(detection.confidence * 100).toFixed(0)}%`;
       const textMetrics = ctx.measureText(label);
       
       ctx.fillRect(
@@ -101,6 +211,24 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
       
       ctx.fillStyle = '#ffffff';
       ctx.fillText(label, detection.x + 4, detection.y - 4);
+      
+      // Draw head center if available
+      if (detection.headCenterX && detection.headCenterY) {
+        ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
+        ctx.beginPath();
+        ctx.arc(detection.headCenterX, detection.headCenterY, 5, 0, 2 * Math.PI);
+        ctx.fill();
+        
+        // Draw crosshair
+        ctx.strokeStyle = isSelected ? '#00ff00' : '#ff0000';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(detection.headCenterX - 10, detection.headCenterY);
+        ctx.lineTo(detection.headCenterX + 10, detection.headCenterY);
+        ctx.moveTo(detection.headCenterX, detection.headCenterY - 10);
+        ctx.lineTo(detection.headCenterX, detection.headCenterY + 10);
+        ctx.stroke();
+      }
     });
   };
 
@@ -109,11 +237,8 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
     if (!overlayCanvasRef.current || detections.length === 0) return;
 
     const rect = overlayCanvasRef.current.getBoundingClientRect();
-    const scaleX = overlayCanvasRef.current.width / rect.width;
-    const scaleY = overlayCanvasRef.current.height / rect.height;
-    
-    const x = (event.clientX - rect.left) * scaleX;
-    const y = (event.clientY - rect.top) * scaleY;
+    const x = (event.clientX - rect.left) / rect.width * overlayCanvasRef.current.width;
+    const y = (event.clientY - rect.top) / rect.height * overlayCanvasRef.current.height;
 
     // Find clicked detection
     for (let i = 0; i < detections.length; i++) {
@@ -153,15 +278,21 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm }: HeadSele
         <p>The selected person will be highlighted in green.</p>
       </div>
 
-      <div className="relative mb-4 bg-black rounded-lg overflow-hidden" style={{ maxHeight: '400px' }}>
+      <div 
+        className="relative mb-4 bg-black rounded-lg overflow-hidden flex items-center justify-center"
+        style={{ 
+          maxHeight: 'calc(100vh - 400px)',
+          aspectRatio: videoElement ? `${videoElement.videoWidth}/${videoElement.videoHeight}` : '16/9'
+        }}
+      >
         <canvas
           ref={canvasRef}
-          className="w-full h-full"
-          style={{ display: 'block', objectFit: 'contain' }}
+          className="absolute inset-0 w-full h-full"
+          style={{ objectFit: 'contain' }}
         />
         <canvas
           ref={overlayCanvasRef}
-          className="absolute top-0 left-0 w-full h-full cursor-pointer"
+          className="absolute inset-0 w-full h-full cursor-pointer"
           style={{ objectFit: 'contain' }}
           onClick={handleCanvasClick}
         />

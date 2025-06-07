@@ -15,6 +15,8 @@ export interface BoundingBox {
   class: string;
   classId: number;
   trackId?: string;
+  headCenterX?: number;
+  headCenterY?: number;
 }
 
 export interface Detection {

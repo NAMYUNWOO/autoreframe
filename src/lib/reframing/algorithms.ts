@@ -3,14 +3,24 @@ import { BoundingBox, FrameTransform, TrackedObject } from '@/types';
 export class SmoothingAlgorithm {
   private history: FrameTransform[] = [];
   private smoothingFactor: number;
-  private maxHistorySize: number = 30;
+  private maxHistorySize: number = 60; // Increased for ByteTrack
   private lastValidTransform: FrameTransform | null = null;
   private velocityHistory: { vx: number; vy: number; vs: number }[] = [];
-  private maxVelocity: number = 50; // Max pixels per frame (increased for faster movements)
-  private maxAcceleration: number = 15; // Max change in velocity per frame
+  private maxVelocity: number = 10; // Much lower for ByteTrack stability
+  private maxAcceleration: number = 2; // Much lower for ByteTrack stability
+  private useAggressiveSmoothing: boolean = false;
+  private medianFilterSize: number = 5; // For outlier rejection
 
-  constructor(smoothingFactor: number = 0.8) {
+  constructor(smoothingFactor: number = 0.8, useAggressiveSmoothing: boolean = false) {
     this.smoothingFactor = smoothingFactor;
+    this.useAggressiveSmoothing = useAggressiveSmoothing;
+    
+    if (useAggressiveSmoothing) {
+      this.maxHistorySize = 90; // Even more history for ByteTrack
+      this.maxVelocity = 5; // Very conservative movement
+      this.maxAcceleration = 1; // Very smooth acceleration
+      this.medianFilterSize = 7; // Stronger outlier rejection
+    }
   }
 
   smooth(currentTransform: FrameTransform): FrameTransform {
@@ -81,36 +91,100 @@ export class SmoothingAlgorithm {
       return currentTransform;
     }
 
-    // Apply Kalman-filter-like smoothing
-    const windowSize = Math.min(20, this.history.length);
-    let smoothedX = 0, smoothedY = 0, smoothedScale = 0;
-    let totalWeight = 0;
-    
-    // Use both position and velocity for prediction
-    for (let i = 0; i < windowSize; i++) {
-      const idx = this.history.length - windowSize + i;
-      const transform = this.history[idx];
+    // Apply median filter first to remove outliers (for ByteTrack)
+    if (this.useAggressiveSmoothing && this.history.length >= this.medianFilterSize) {
+      const recentHistory = this.history.slice(-this.medianFilterSize);
       
-      // Weight based on recency and consistency
-      const recencyWeight = Math.exp(-((windowSize - i - 1) * 0.1));
-      const weight = recencyWeight;
+      // Get median values
+      const xValues = recentHistory.map(t => t.x).sort((a, b) => a - b);
+      const yValues = recentHistory.map(t => t.y).sort((a, b) => a - b);
+      const scaleValues = recentHistory.map(t => t.scale).sort((a, b) => a - b);
       
-      smoothedX += transform.x * weight;
-      smoothedY += transform.y * weight;
-      smoothedScale += transform.scale * weight;
-      totalWeight += weight;
+      const medianIdx = Math.floor(this.medianFilterSize / 2);
+      const medianX = xValues[medianIdx];
+      const medianY = yValues[medianIdx];
+      const medianScale = scaleValues[medianIdx];
+      
+      // Check if current transform is an outlier
+      const xDiff = Math.abs(currentTransform.x - medianX);
+      const yDiff = Math.abs(currentTransform.y - medianY);
+      const scaleDiff = Math.abs(currentTransform.scale - medianScale);
+      
+      // If outlier, use median instead
+      if (xDiff > 50 || yDiff > 50 || scaleDiff > 0.2) {
+        currentTransform = {
+          x: medianX,
+          y: medianY,
+          scale: medianScale,
+          rotation: 0
+        };
+      }
     }
     
-    smoothedX /= totalWeight;
-    smoothedY /= totalWeight;
-    smoothedScale /= totalWeight;
-
-    return {
-      x: smoothedX,
-      y: smoothedY,
-      scale: smoothedScale,
-      rotation: 0
-    };
+    // Apply Kalman-filter-like smoothing
+    const windowSize = this.useAggressiveSmoothing ? Math.min(60, this.history.length) : Math.min(20, this.history.length);
+    
+    if (this.useAggressiveSmoothing) {
+      // Use Gaussian weighted average for ByteTrack
+      let smoothedX = 0, smoothedY = 0, smoothedScale = 0;
+      let totalWeight = 0;
+      
+      const sigma = windowSize / 3; // Standard deviation for Gaussian
+      
+      for (let i = 0; i < windowSize; i++) {
+        const idx = this.history.length - windowSize + i;
+        const transform = this.history[idx];
+        
+        // Gaussian weight
+        const distance = windowSize - i - 1;
+        const weight = Math.exp(-(distance * distance) / (2 * sigma * sigma));
+        
+        smoothedX += transform.x * weight;
+        smoothedY += transform.y * weight;
+        smoothedScale += transform.scale * weight;
+        totalWeight += weight;
+      }
+      
+      smoothedX /= totalWeight;
+      smoothedY /= totalWeight;
+      smoothedScale /= totalWeight;
+      
+      return {
+        x: smoothedX,
+        y: smoothedY,
+        scale: smoothedScale,
+        rotation: 0
+      };
+    } else {
+      // Original smoothing for non-ByteTrack
+      let smoothedX = 0, smoothedY = 0, smoothedScale = 0;
+      let totalWeight = 0;
+      
+      for (let i = 0; i < windowSize; i++) {
+        const idx = this.history.length - windowSize + i;
+        const transform = this.history[idx];
+        
+        const smoothingStrength = 0.15;
+        const recencyWeight = Math.exp(-((windowSize - i - 1) * smoothingStrength));
+        const weight = recencyWeight;
+        
+        smoothedX += transform.x * weight;
+        smoothedY += transform.y * weight;
+        smoothedScale += transform.scale * weight;
+        totalWeight += weight;
+      }
+      
+      smoothedX /= totalWeight;
+      smoothedY /= totalWeight;
+      smoothedScale /= totalWeight;
+      
+      return {
+        x: smoothedX,
+        y: smoothedY,
+        scale: smoothedScale,
+        rotation: 0
+      };
+    }
   }
 
   reset(): void {

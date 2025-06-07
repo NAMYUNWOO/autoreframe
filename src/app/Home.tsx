@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useVideoProcessor } from '@/hooks/useVideoProcessor';
 import { useObjectDetection } from '@/hooks/useObjectDetection';
 import { useReframing } from '@/hooks/useReframing';
@@ -18,10 +18,12 @@ export default function Home() {
   const [currentStep, setCurrentStep] = useState<'upload' | 'process' | 'export'>('upload');
   const [showDetections, setShowDetections] = useState(true);
   const [showReframing, setShowReframing] = useState(true);
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.2);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.3); // 30% default for better detection
+  console.log('Home: Initial confidence threshold state:', confidenceThreshold);
   const [detectionComplete, setDetectionComplete] = useState(false);
   const [showHeadSelector, setShowHeadSelector] = useState(false);
   const [showTrajectoryEditor, setShowTrajectoryEditor] = useState(false);
+  const [selectedTrackIdForByteTrack, setSelectedTrackIdForByteTrack] = useState<string | null>(null);
 
   const {
     videoFile,
@@ -45,8 +47,19 @@ export default function Home() {
     getSelectedTrack,
     setConfidenceThreshold: updateConfidenceThreshold,
     setTargetHead,
-    reset: resetDetection
+    selectByteTrackId,
+    reset: resetDetection,
+    useByteTrack,
+    setUseByteTrack
   } = useObjectDetection();
+  
+  // Set initial confidence threshold when model is loaded
+  useEffect(() => {
+    if (isModelLoaded) {
+      console.log('Home: Setting initial confidence threshold to', confidenceThreshold);
+      updateConfidenceThreshold(confidenceThreshold);
+    }
+  }, [isModelLoaded, confidenceThreshold, updateConfidenceThreshold]);
 
   const {
     config,
@@ -80,6 +93,11 @@ export default function Home() {
       return metadata;
     } catch (error) {
       console.error('Error loading video:', error);
+      if (error instanceof Error) {
+        alert(`Failed to load video: ${error.message}`);
+      } else {
+        alert('Failed to load video. Please try a different file.');
+      }
       throw error;
     }
   }, [loadVideo, resetVideo, resetDetection, resetReframing]);
@@ -90,23 +108,31 @@ export default function Home() {
     try {
       await processVideo(processFrames, metadata);
       setDetectionComplete(true);
+      
+      // If we have a selected track ID, select it
+      if (selectedTrackIdForByteTrack) {
+        selectByteTrackId(selectedTrackIdForByteTrack);
+      }
     } catch (error) {
       console.error('Error during detection:', error);
     }
-  }, [processVideo, processFrames, metadata]);
+  }, [processVideo, processFrames, metadata, selectedTrackIdForByteTrack, selectByteTrackId]);
 
   const handleReframing = useCallback(async () => {
     if (!metadata || !detections.length) return;
     
-    // If we have a target detection, ensure manual selection mode
-    if (targetDetection) {
-      updateConfig({ targetSelection: 'manual' });
-    }
+    // Always use manual selection mode
+    updateConfig({ targetSelection: 'manual' });
     
     const selectedTrack = getSelectedTrack();
+    if (!selectedTrack) {
+      alert('Please select a person to track first');
+      return;
+    }
+    
     await processReframing(detections, selectedTrack, metadata);
     setShowTrajectoryEditor(true);
-  }, [metadata, detections, getSelectedTrack, processReframing, targetDetection, updateConfig]);
+  }, [metadata, detections, getSelectedTrack, processReframing, updateConfig]);
 
   const handleTrajectoryConfirm = useCallback(() => {
     setShowTrajectoryEditor(false);
@@ -141,12 +167,22 @@ export default function Home() {
   }, [getVideoElement, metadata, exportVideo, videoFile, transforms]);
 
   const handleConfidenceChange = useCallback((threshold: number) => {
+    console.log('Home: handleConfidenceChange called with', threshold, 'from UI');
     setConfidenceThreshold(threshold);
     updateConfidenceThreshold(threshold);
   }, [updateConfidenceThreshold]);
 
   const handleHeadSelect = useCallback((box: BoundingBox) => {
-    // Create a Detection object with the selected box
+    // Store the track ID
+    if (box.trackId) {
+      setSelectedTrackIdForByteTrack(box.trackId);
+      console.log('Selected ByteTrack ID:', box.trackId);
+      if (box.headCenterX && box.headCenterY) {
+        console.log('Head center:', box.headCenterX, box.headCenterY);
+      }
+    }
+    
+    // Create a Detection object with the selected box (including head center info)
     const detection = {
       frameNumber: 0,
       timestamp: 0,
@@ -169,6 +205,7 @@ export default function Home() {
     setDetectionComplete(false);
     setShowHeadSelector(false);
     setShowTrajectoryEditor(false);
+    setSelectedTrackIdForByteTrack(null);
   }, [resetVideo, resetDetection, resetReframing]);
 
 
@@ -265,9 +302,9 @@ export default function Home() {
         )}
 
         {currentStep === 'process' && metadata && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Video Preview */}
-            <div className="lg:col-span-2">
+            <div>
               <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
                 <VideoPlayer
                   videoElement={getVideoElement()}
@@ -289,6 +326,7 @@ export default function Home() {
                   videoElement={getVideoElement()}
                   onSelectHead={handleHeadSelect}
                   onConfirm={handleHeadSelectorConfirm}
+                  confidenceThreshold={confidenceThreshold}
                 />
               )}
 
@@ -338,6 +376,8 @@ export default function Home() {
                     </span>
                   </div>
                 )}
+                
+                {/* ByteTrack is always enabled for consistency */}
               </div>
 
               {/* Reframing Controls */}

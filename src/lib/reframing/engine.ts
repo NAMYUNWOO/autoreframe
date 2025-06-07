@@ -5,21 +5,37 @@ import {
   ReframingConfig,
   TrackedObject 
 } from '@/types';
-import { SmoothingAlgorithm, TargetSelector, FrameCalculator } from './algorithms';
+import { SmoothingAlgorithm, TargetSelector } from './algorithms';
+import { StableFrameCalculator } from './stable-calculator';
+import { MultiPointStabilizer } from './multi-point-stabilizer';
+import { TrajectorySmoother } from './trajectory-smoother';
+import { BezierTrajectorySmoother } from './bezier-trajectory-smoother';
 import { ASPECT_RATIOS } from './presets';
 
 export class ReframingEngine {
   private smoother: SmoothingAlgorithm;
   private targetSelector: TargetSelector;
-  private frameCalculator: FrameCalculator;
+  private frameCalculator: StableFrameCalculator;
+  private multiPointStabilizer: MultiPointStabilizer;
+  private trajectorySmoother: TrajectorySmoother;
+  private bezierTrajectorySmoother: BezierTrajectorySmoother;
   private config: ReframingConfig;
   private frameTransforms: Map<number, FrameTransform> = new Map();
+  private useMultiPointStabilization: boolean = false; // Disable for now
+  private useTrajectorySmoothing: boolean = false; // Disable old trajectory smoothing
+  private useBezierSmoothing: boolean = true; // Use Bezier curve smoothing
   
   constructor(config: ReframingConfig) {
     this.config = config;
-    this.smoother = new SmoothingAlgorithm(config.smoothness);
+    // Always use aggressive smoothing optimized for ByteTrack
+    this.smoother = new SmoothingAlgorithm(config.smoothness, true);
     this.targetSelector = new TargetSelector();
-    this.frameCalculator = new FrameCalculator();
+    this.frameCalculator = new StableFrameCalculator();
+    this.multiPointStabilizer = new MultiPointStabilizer();
+    this.trajectorySmoother = new TrajectorySmoother();
+    this.bezierTrajectorySmoother = new BezierTrajectorySmoother();
+    // Enable stable center to reduce jitter
+    this.frameCalculator.setUseStableCenter(true);
   }
 
   processFrame(
@@ -30,21 +46,32 @@ export class ReframingEngine {
     frameHeight: number
   ): FrameTransform {
     let targets: BoundingBox[] = [];
+    
 
     if (this.config.targetSelection === 'manual' && selectedTrack) {
-      // STRICTLY use only manually selected track
-      const trackBox = selectedTrack.positions.get(frameNumber);
-      if (trackBox) {
-        targets = [trackBox];
+      // When using ByteTrack, find matching detection by track ID
+      const matchingDetection = detections.find(det => 
+        det.trackId === selectedTrack.id
+      );
+      
+      if (matchingDetection) {
+        targets = [matchingDetection];
+        console.log(`Frame ${frameNumber}: Found matching detection for track ${selectedTrack.id}, head center: ${matchingDetection.headCenterX}, ${matchingDetection.headCenterY}`);
       } else {
-        // No detection for this frame - use interpolation
-        const nearestBox = this.findNearestTrackPosition(selectedTrack, frameNumber);
-        if (nearestBox) {
-          targets = [nearestBox];
+        // Find the selected track in any detection
+        const selectedBox = detections.find(det => det.trackId === selectedTrack.id);
+        if (selectedBox) {
+          targets = [selectedBox];
+        } else {
+          // Use the last known position from track
+          const trackBox = selectedTrack.positions.get(frameNumber);
+          if (trackBox) {
+            targets = [trackBox];
+          }
         }
       }
       // Don't process any other logic when manual selection is active
-    } else if (this.config.trackingMode === 'single' && this.config.targetSelection !== 'manual') {
+    } else if (this.config.trackingMode === 'single') {
       // Select single target based on strategy
       if (this.config.targetSelection !== 'manual') {
         const target = this.targetSelector.selectTarget(
@@ -86,13 +113,28 @@ export class ReframingEngine {
 
     // Calculate optimal frame for targets
     const outputRatio = ASPECT_RATIOS[this.config.outputRatio];
-    const rawTransform = this.frameCalculator.calculateOptimalFrame(
-      targets,
-      outputRatio,
-      frameWidth,
-      frameHeight,
-      this.config.padding
-    );
+    
+    let rawTransform: FrameTransform;
+    
+    // Use multi-point stabilizer for single target tracking
+    if (this.useMultiPointStabilization && targets.length === 1) {
+      rawTransform = this.multiPointStabilizer.calculateStableFrame(
+        targets[0] as BoundingBox & { headCenterX?: number; headCenterY?: number },
+        outputRatio,
+        frameWidth,
+        frameHeight,
+        this.config.padding
+      );
+    } else {
+      // Use original frame calculator for other cases
+      rawTransform = this.frameCalculator.calculateOptimalFrame(
+        targets,
+        outputRatio,
+        frameWidth,
+        frameHeight,
+        this.config.padding
+      );
+    }
 
     // Apply smoothing
     const smoothedTransform = this.smoother.smooth(rawTransform);
@@ -107,11 +149,18 @@ export class ReframingEngine {
     detections: Detection[],
     selectedTrack: TrackedObject | null,
     frameWidth: number,
-    frameHeight: number
+    frameHeight: number,
+    fps: number = 30
   ): Map<number, FrameTransform> {
-    // Reset smoother for new sequence
+    // Reset smoother and calculator for new sequence
     this.smoother.reset();
+    this.frameCalculator.reset();
+    this.multiPointStabilizer.reset();
     this.frameTransforms.clear();
+    
+    // Set FPS for trajectory smoothers
+    this.trajectorySmoother.setFPS(fps);
+    this.bezierTrajectorySmoother.setFPS(fps);
 
     // Create a map for quick detection lookup
     const detectionMap = new Map<number, Detection>();
@@ -122,81 +171,71 @@ export class ReframingEngine {
     // Get total frames from detections
     const maxFrame = Math.max(...detections.map(d => d.frameNumber));
     
-    // First pass: Process frames with actual detections
-    const keyframeTransforms = new Map<number, FrameTransform>();
-    for (const detection of detections) {
-      const boxes = detection.boxes;
-      const transform = this.processFrame(
-        detection.frameNumber,
-        boxes,
-        selectedTrack,
-        frameWidth,
-        frameHeight
-      );
-      keyframeTransforms.set(detection.frameNumber, transform);
-    }
+    // Process every frame since ByteTrack provides interpolated data
+    console.log(`ReframingEngine: Processing ${maxFrame + 1} frames with ByteTrack interpolated data`);
     
-    // Second pass: Interpolate between keyframes for smooth trajectory
-    for (let frameNumber = 0; frameNumber <= maxFrame; frameNumber++) {
-      if (keyframeTransforms.has(frameNumber)) {
-        // Already processed
-        continue;
-      }
+    // If using Bezier smoothing and we have a selected track
+    if (this.useBezierSmoothing && selectedTrack) {
+      console.log('Using Bezier curve smoothing for stable reframing');
       
-      // Find surrounding keyframes
-      let prevKeyframe: number | null = null;
-      let nextKeyframe: number | null = null;
+      // Get smoothed trajectory for the entire sequence
+      const outputRatio = ASPECT_RATIOS[this.config.outputRatio];
       
-      for (let i = frameNumber - 1; i >= 0; i--) {
-        if (keyframeTransforms.has(i)) {
-          prevKeyframe = i;
+      // Find the initial dimensions from the first detection of the selected track
+      let initialTargetBox: { width: number; height: number } | undefined;
+      for (const detection of detections) {
+        const targetBox = detection.boxes.find(box => box.trackId === selectedTrack.id);
+        if (targetBox) {
+          initialTargetBox = { width: targetBox.width, height: targetBox.height };
+          console.log(`ReframingEngine: Found initial target dimensions: ${targetBox.width}x${targetBox.height} from frame ${detection.frameNumber}`);
           break;
         }
       }
       
-      for (let i = frameNumber + 1; i <= maxFrame; i++) {
-        if (keyframeTransforms.has(i)) {
-          nextKeyframe = i;
-          break;
-        }
-      }
+      const smoothedTransforms = this.bezierTrajectorySmoother.smoothTrajectory(
+        detections,
+        selectedTrack.id,
+        frameWidth,
+        frameHeight,
+        outputRatio,
+        initialTargetBox
+      );
       
-      // Interpolate transform
-      let interpolatedTransform: FrameTransform;
+      // Use smoothed transforms
+      this.frameTransforms = smoothedTransforms;
+    } else if (this.useTrajectorySmoothing && selectedTrack) {
+      console.log('Using trajectory smoothing for stable reframing');
       
-      if (prevKeyframe !== null && nextKeyframe !== null) {
-        const prevTransform = keyframeTransforms.get(prevKeyframe)!;
-        const nextTransform = keyframeTransforms.get(nextKeyframe)!;
-        const t = (frameNumber - prevKeyframe) / (nextKeyframe - prevKeyframe);
+      // Get smoothed trajectory for the entire sequence
+      const outputRatio = ASPECT_RATIOS[this.config.outputRatio];
+      const smoothedTransforms = this.trajectorySmoother.smoothTrajectory(
+        detections,
+        selectedTrack.id,
+        frameWidth,
+        frameHeight,
+        outputRatio
+      );
+      
+      // Use smoothed transforms
+      this.frameTransforms = smoothedTransforms;
+    } else {
+      // Original processing
+      for (let frameNumber = 0; frameNumber <= maxFrame; frameNumber++) {
+        const detection = detectionMap.get(frameNumber);
+        const boxes = detection ? detection.boxes : [];
         
-        // Smooth interpolation using cubic easing
-        const easeT = this.cubicEase(t);
+        // Process frame to get raw transform
+        const rawTransform = this.processFrame(
+          frameNumber,
+          boxes,
+          selectedTrack,
+          frameWidth,
+          frameHeight
+        );
         
-        interpolatedTransform = {
-          x: prevTransform.x + (nextTransform.x - prevTransform.x) * easeT,
-          y: prevTransform.y + (nextTransform.y - prevTransform.y) * easeT,
-          scale: prevTransform.scale + (nextTransform.scale - prevTransform.scale) * easeT,
-          rotation: 0
-        };
-      } else if (prevKeyframe !== null) {
-        // Use last known position
-        interpolatedTransform = keyframeTransforms.get(prevKeyframe)!;
-      } else if (nextKeyframe !== null) {
-        // Use next known position
-        interpolatedTransform = keyframeTransforms.get(nextKeyframe)!;
-      } else {
-        // Fallback to center
-        interpolatedTransform = {
-          x: frameWidth / 2,
-          y: frameHeight / 2,
-          scale: 1,
-          rotation: 0
-        };
+        // Note: processFrame already applies smoothing internally
+        this.frameTransforms.set(frameNumber, rawTransform);
       }
-      
-      // Apply smoothing to interpolated transform
-      const smoothedTransform = this.smoother.smooth(interpolatedTransform);
-      this.frameTransforms.set(frameNumber, smoothedTransform);
     }
 
     return this.frameTransforms;
@@ -205,8 +244,10 @@ export class ReframingEngine {
   updateConfig(config: Partial<ReframingConfig>): void {
     this.config = { ...this.config, ...config };
     if (config.smoothness !== undefined) {
-      this.smoother = new SmoothingAlgorithm(config.smoothness);
+      this.smoother = new SmoothingAlgorithm(config.smoothness, true);
     }
+    // Update frame calculator if needed
+    this.frameCalculator.setUseStableCenter(true);
   }
 
   getTransform(frameNumber: number): FrameTransform | undefined {

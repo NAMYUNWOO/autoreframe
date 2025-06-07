@@ -1,6 +1,6 @@
-import { Detection, FrameTransform } from '@/types';
+import { Detection, FrameTransform, ReframingConfig } from '@/types';
 import { TrajectoryInterpolator } from './trajectory-interpolator';
-import { ReframeSizeCalculator } from './reframe-size-calculator';
+import { ReframeSizeCalculatorV2, ReframingSettings } from './reframe-size-calculator-v2';
 
 interface TrajectoryPoint {
   frame: number;
@@ -37,7 +37,8 @@ export class BezierTrajectorySmoother {
     frameWidth: number,
     frameHeight: number,
     outputRatio: number,
-    initialTargetBox?: { width: number; height: number }
+    initialTargetBox?: { width: number; height: number },
+    reframingConfig?: ReframingConfig
   ): Map<number, FrameTransform> {
     console.log('BezierTrajectorySmoother: Starting trajectory smoothing');
     
@@ -120,7 +121,8 @@ export class BezierTrajectorySmoother {
       frameWidth,
       frameHeight,
       outputRatio,
-      hasHeadData
+      hasHeadData,
+      reframingConfig
     );
   }
   
@@ -404,24 +406,34 @@ export class BezierTrajectorySmoother {
     frameWidth: number,
     frameHeight: number,
     outputRatio: number,
-    hasHeadData: boolean = false
+    hasHeadData: boolean = false,
+    reframingConfig?: ReframingConfig
   ): Map<number, FrameTransform> {
     const transforms = new Map<number, FrameTransform>();
     
-    // Use ReframeSizeCalculator to determine optimal reframe dimensions
+    // Convert ReframingConfig to ReframingSettings
+    const settings: Partial<ReframingSettings> = reframingConfig ? {
+      outputRatio: reframingConfig.outputRatio,
+      padding: reframingConfig.padding,
+      smoothness: reframingConfig.smoothness
+    } : {};
+    
+    // Use ReframeSizeCalculatorV2 to determine optimal reframe dimensions
     // If we have head data, use head-based framing for better portrait shots
     const reframeDimensions = hasHeadData 
-      ? ReframeSizeCalculator.calculateHeadBasedReframeSize(
+      ? ReframeSizeCalculatorV2.calculateHeadBasedReframeSize(
           dimensions,
           frameWidth,
           frameHeight,
-          outputRatio
+          outputRatio,
+          settings
         )
-      : ReframeSizeCalculator.calculateOptimalReframeSize(
+      : ReframeSizeCalculatorV2.calculateOptimalReframeSize(
           dimensions,
           frameWidth,
           frameHeight,
-          outputRatio
+          outputRatio,
+          settings
         );
     
     // Extract calculated values
@@ -441,8 +453,10 @@ export class BezierTrajectorySmoother {
       const clampedX = Math.max(halfWidth, Math.min(frameWidth - halfWidth, point.x));
       const clampedY = Math.max(halfHeight, Math.min(frameHeight - halfHeight, point.y));
       
-      if (point.frame >= 299 && point.frame <= 300) {
-        console.log(`Frame ${point.frame}: Transform - center=(${clampedX}, ${clampedY}), scale=${scale}, box size=${consistentWidth}x${consistentHeight}`);
+      // Debug logging for specific frames and the last frame
+      const isLastFrame = point.frame === trajectory[trajectory.length - 1].frame;
+      if (point.frame >= 299 && point.frame <= 300 || isLastFrame) {
+        console.log(`Frame ${point.frame}${isLastFrame ? ' (LAST)' : ''}: Transform - center=(${clampedX}, ${clampedY}), scale=${scale}, box size=${consistentWidth}x${consistentHeight}`);
       }
       
       transforms.set(point.frame, {

@@ -7,8 +7,6 @@ import {
 } from '@/types';
 import { SmoothingAlgorithm, TargetSelector } from './algorithms';
 import { StableFrameCalculator } from './stable-calculator';
-import { MultiPointStabilizer } from './multi-point-stabilizer';
-import { TrajectorySmoother } from './trajectory-smoother';
 import { BezierTrajectorySmoother } from './bezier-trajectory-smoother';
 import { ASPECT_RATIOS } from './presets';
 
@@ -16,24 +14,22 @@ export class ReframingEngine {
   private smoother: SmoothingAlgorithm;
   private targetSelector: TargetSelector;
   private frameCalculator: StableFrameCalculator;
-  private multiPointStabilizer: MultiPointStabilizer;
-  private trajectorySmoother: TrajectorySmoother;
   private bezierTrajectorySmoother: BezierTrajectorySmoother;
   private config: ReframingConfig;
   private frameTransforms: Map<number, FrameTransform> = new Map();
   private useMultiPointStabilization: boolean = false; // Disable for now
   private useTrajectorySmoothing: boolean = false; // Disable old trajectory smoothing
   private useBezierSmoothing: boolean = true; // Use Bezier curve smoothing
+  private initialTargetBox?: { width: number; height: number };
   
-  constructor(config: ReframingConfig) {
+  constructor(config: ReframingConfig, initialTargetBox?: { width: number; height: number }) {
     this.config = config;
     // Always use aggressive smoothing optimized for ByteTrack
     this.smoother = new SmoothingAlgorithm(config.smoothness, true);
     this.targetSelector = new TargetSelector();
     this.frameCalculator = new StableFrameCalculator();
-    this.multiPointStabilizer = new MultiPointStabilizer();
-    this.trajectorySmoother = new TrajectorySmoother();
     this.bezierTrajectorySmoother = new BezierTrajectorySmoother();
+    this.initialTargetBox = initialTargetBox;
     // Enable stable center to reduce jitter
     this.frameCalculator.setUseStableCenter(true);
   }
@@ -116,25 +112,14 @@ export class ReframingEngine {
     
     let rawTransform: FrameTransform;
     
-    // Use multi-point stabilizer for single target tracking
-    if (this.useMultiPointStabilization && targets.length === 1) {
-      rawTransform = this.multiPointStabilizer.calculateStableFrame(
-        targets[0] as BoundingBox & { headCenterX?: number; headCenterY?: number },
-        outputRatio,
-        frameWidth,
-        frameHeight,
-        this.config.padding
-      );
-    } else {
-      // Use original frame calculator for other cases
-      rawTransform = this.frameCalculator.calculateOptimalFrame(
-        targets,
-        outputRatio,
-        frameWidth,
-        frameHeight,
-        this.config.padding
-      );
-    }
+    // Use frame calculator
+    rawTransform = this.frameCalculator.calculateOptimalFrame(
+      targets,
+      outputRatio,
+      frameWidth,
+      frameHeight,
+      this.config.padding
+    );
 
     // Apply smoothing
     const smoothedTransform = this.smoother.smooth(rawTransform);
@@ -155,11 +140,9 @@ export class ReframingEngine {
     // Reset smoother and calculator for new sequence
     this.smoother.reset();
     this.frameCalculator.reset();
-    this.multiPointStabilizer.reset();
     this.frameTransforms.clear();
     
-    // Set FPS for trajectory smoothers
-    this.trajectorySmoother.setFPS(fps);
+    // Set FPS for trajectory smoother
     this.bezierTrajectorySmoother.setFPS(fps);
 
     // Create a map for quick detection lookup
@@ -181,15 +164,21 @@ export class ReframingEngine {
       // Get smoothed trajectory for the entire sequence
       const outputRatio = ASPECT_RATIOS[this.config.outputRatio];
       
-      // Find the initial dimensions from the first detection of the selected track
-      let initialTargetBox: { width: number; height: number } | undefined;
-      for (const detection of detections) {
-        const targetBox = detection.boxes.find(box => box.trackId === selectedTrack.id);
-        if (targetBox) {
-          initialTargetBox = { width: targetBox.width, height: targetBox.height };
-          console.log(`ReframingEngine: Found initial target dimensions: ${targetBox.width}x${targetBox.height} from frame ${detection.frameNumber}`);
-          break;
+      // Use the provided initial target box if available, otherwise find from first detection
+      let initialTargetBox: { width: number; height: number } | undefined = this.initialTargetBox;
+      
+      if (!initialTargetBox) {
+        // Find the initial dimensions from the first detection of the selected track
+        for (const detection of detections) {
+          const targetBox = detection.boxes.find(box => box.trackId === selectedTrack.id);
+          if (targetBox) {
+            initialTargetBox = { width: targetBox.width, height: targetBox.height };
+            console.log(`ReframingEngine: Found initial target dimensions: ${targetBox.width}x${targetBox.height} from frame ${detection.frameNumber}`);
+            break;
+          }
         }
+      } else {
+        console.log(`ReframingEngine: Using provided initial target dimensions: ${initialTargetBox.width}x${initialTargetBox.height}`);
       }
       
       const smoothedTransforms = this.bezierTrajectorySmoother.smoothTrajectory(
@@ -198,22 +187,8 @@ export class ReframingEngine {
         frameWidth,
         frameHeight,
         outputRatio,
-        initialTargetBox
-      );
-      
-      // Use smoothed transforms
-      this.frameTransforms = smoothedTransforms;
-    } else if (this.useTrajectorySmoothing && selectedTrack) {
-      console.log('Using trajectory smoothing for stable reframing');
-      
-      // Get smoothed trajectory for the entire sequence
-      const outputRatio = ASPECT_RATIOS[this.config.outputRatio];
-      const smoothedTransforms = this.trajectorySmoother.smoothTrajectory(
-        detections,
-        selectedTrack.id,
-        frameWidth,
-        frameHeight,
-        outputRatio
+        initialTargetBox,
+        this.config
       );
       
       // Use smoothed transforms

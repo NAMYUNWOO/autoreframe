@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { Detection, FrameTransform, VideoMetadata } from '@/types';
+import { Detection, FrameTransform, VideoMetadata, ReframingConfig } from '@/types';
+import { ReframeSizeCalculatorV2 } from '@/lib/reframing/reframe-size-calculator-v2';
 
 interface VideoPlayerProps {
   videoElement: HTMLVideoElement | null;
@@ -11,6 +12,8 @@ interface VideoPlayerProps {
   showDetections: boolean;
   showReframing: boolean;
   outputRatio: string;
+  reframingConfig?: ReframingConfig;
+  initialTargetBox?: { width: number; height: number } | null;
 }
 
 export function VideoPlayer({
@@ -20,7 +23,9 @@ export function VideoPlayer({
   currentTransform,
   showDetections,
   showReframing,
-  outputRatio
+  outputRatio,
+  reframingConfig,
+  initialTargetBox
 }: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -162,23 +167,49 @@ export function VideoPlayer({
       ctx.lineWidth = 3;
       ctx.setLineDash([10, 5]);
       
-      // Calculate reframing rectangle with consistent dimensions
-      const aspectRatio = outputRatio === '16:9' ? 16/9 : 
-                         outputRatio === '9:16' ? 9/16 : 
-                         outputRatio === '1:1' ? 1 : 
-                         outputRatio === '4:3' ? 4/3 : 3/4;
+      // Calculate reframing rectangle using the same method as TrajectoryEditor and Export
+      const outputAspectRatio = outputRatio === '16:9' ? 16/9 : 
+                               outputRatio === '9:16' ? 9/16 : 
+                               outputRatio === '1:1' ? 1 : 
+                               outputRatio === '4:3' ? 4/3 : 3/4;
       
-      // Maintain consistent dimensions based on scale
-      const frameArea = metadata.width / currentTransform.scale;
-      const width = frameArea;
-      const height = frameArea / aspectRatio;
+      let width: number, height: number;
+      
+      if (initialTargetBox && reframingConfig) {
+        // Use the same calculator for consistency
+        const calculatedDimensions = ReframeSizeCalculatorV2.calculateOptimalReframeSize(
+          initialTargetBox,
+          metadata.width,
+          metadata.height,
+          outputAspectRatio,
+          reframingConfig
+        );
+        width = calculatedDimensions.width;
+        height = calculatedDimensions.height;
+      } else {
+        // Fallback to scale-based calculation
+        const baseCropW = metadata.width / currentTransform.scale;
+        const baseCropH = metadata.height / currentTransform.scale;
+        
+        width = baseCropW;
+        height = baseCropH;
+        const cropAspectRatio = width / height;
+        
+        if (Math.abs(cropAspectRatio - outputAspectRatio) > 0.01) {
+          if (cropAspectRatio > outputAspectRatio) {
+            width = height * outputAspectRatio;
+          } else {
+            height = width / outputAspectRatio;
+          }
+        }
+      }
       
       const x = currentTransform.x - width / 2;
       const y = currentTransform.y - height / 2;
       
       // Debug log for frames 299-300
       if (frameNumber >= 299 && frameNumber <= 300) {
-        console.log(`VideoPlayer Frame ${frameNumber}: Reframe box ${width}x${height} at (${x}, ${y}), scale=${currentTransform.scale}`);
+        console.log(`VideoPlayer Frame ${frameNumber}: Reframe box ${width.toFixed(0)}x${height.toFixed(0)} at (${x.toFixed(0)}, ${y.toFixed(0)}), scale=${currentTransform.scale.toFixed(2)}`);
       }
       
       ctx.strokeRect(x, y, width, height);
@@ -199,7 +230,7 @@ export function VideoPlayer({
     if (isPlaying) {
       animationFrameRef.current = requestAnimationFrame(drawOverlay);
     }
-  }, [videoElement, metadata, detections, currentTransform, showDetections, showReframing, outputRatio, currentTime, isPlaying]);
+  }, [videoElement, metadata, detections, currentTransform, showDetections, showReframing, outputRatio, currentTime, isPlaying, reframingConfig, initialTargetBox]);
 
   useEffect(() => {
     drawOverlay();

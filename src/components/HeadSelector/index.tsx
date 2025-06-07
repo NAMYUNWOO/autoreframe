@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Detection, BoundingBox } from '@/types';
+import { Detection, BoundingBox, ReframingConfig } from '@/types';
+import { REFRAMING_PRESETS } from '@/lib/reframing/presets';
 
 interface HeadSelectorProps {
   videoElement: HTMLVideoElement | null;
   onSelectHead: (box: BoundingBox) => void;
-  onConfirm: () => void;
+  onConfirm: (reframingConfig?: ReframingConfig) => void;
   confidenceThreshold?: number;
 }
 
@@ -16,6 +17,33 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
   const [isDetecting, setIsDetecting] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Reframing settings state
+  const [showReframeSettings, setShowReframeSettings] = useState(false);
+  const [reframingConfig, setReframingConfig] = useState<ReframingConfig>({
+    outputRatio: '16:9',
+    padding: 0.3,
+    smoothness: 0.7
+  });
+  const [currentPreset, setCurrentPreset] = useState<string>('smooth-follow');
+
+  // Apply preset
+  const handlePresetChange = (preset: string) => {
+    setCurrentPreset(preset);
+    const presetConfig = REFRAMING_PRESETS[preset];
+    if (presetConfig) {
+      setReframingConfig({
+        ...reframingConfig,
+        ...presetConfig,
+        outputRatio: reframingConfig.outputRatio // Preserve output ratio
+      });
+    }
+  };
+
+  // Update reframing config
+  const updateReframingConfig = (updates: Partial<ReframingConfig>) => {
+    setReframingConfig(prev => ({ ...prev, ...updates }));
+  };
 
   // Detect heads in first frame
   const detectFirstFrame = useCallback(async () => {
@@ -167,7 +195,7 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
 
       // Draw detections
       if (finalDetections.length > 0) {
-        drawDetections(overlayCtx, finalDetections);
+        drawDetections(overlayCtx, finalDetections, null);
       } else {
         console.warn('No persons detected in the first frame');
       }
@@ -183,9 +211,31 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
     }
   }, [videoElement, onSelectHead, confidenceThreshold]);
 
-  // Draw detection boxes
-  const drawDetections = (ctx: CanvasRenderingContext2D, detections: BoundingBox[]) => {
+  // Draw detection boxes with reframe preview
+  const drawDetections = useCallback((ctx: CanvasRenderingContext2D, detections: BoundingBox[], reframeBox?: { x: number; y: number; width: number; height: number } | null) => {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    
+    // Draw reframe box first (so it's behind detections)
+    if (reframeBox && selectedIndex !== null) {
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 5]);
+      ctx.strokeRect(reframeBox.x, reframeBox.y, reframeBox.width, reframeBox.height);
+      ctx.setLineDash([]);
+      
+      // Draw center crosshair
+      const centerX = reframeBox.x + reframeBox.width / 2;
+      const centerY = reframeBox.y + reframeBox.height / 2;
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 1;
+      const crossSize = 20;
+      ctx.beginPath();
+      ctx.moveTo(centerX - crossSize, centerY);
+      ctx.lineTo(centerX + crossSize, centerY);
+      ctx.moveTo(centerX, centerY - crossSize);
+      ctx.lineTo(centerX, centerY + crossSize);
+      ctx.stroke();
+    }
     
     detections.forEach((detection, index) => {
       const isSelected = index === selectedIndex;
@@ -230,7 +280,54 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
         ctx.stroke();
       }
     });
-  };
+  }, [selectedIndex]);
+
+  // Calculate reframe box preview
+  const calculateReframeBox = useCallback(() => {
+    if (selectedIndex === null || !detections[selectedIndex] || !canvasRef.current) return null;
+    
+    const selectedBox = detections[selectedIndex];
+    const frameWidth = canvasRef.current.width;
+    const frameHeight = canvasRef.current.height;
+    
+    // Get output aspect ratio
+    const outputAspectRatio = reframingConfig.outputRatio === '16:9' ? 16/9 : 
+                             reframingConfig.outputRatio === '9:16' ? 9/16 : 
+                             reframingConfig.outputRatio === '1:1' ? 1 : 
+                             reframingConfig.outputRatio === '4:3' ? 4/3 : 3/4;
+    
+    // Calculate reframe dimensions using the same calculator as the engine
+    const { ReframeSizeCalculatorV2 } = require('@/lib/reframing/reframe-size-calculator-v2');
+    const reframeDimensions = ReframeSizeCalculatorV2.calculateOptimalReframeSize(
+      selectedBox,
+      frameWidth,
+      frameHeight,
+      outputAspectRatio,
+      reframingConfig
+    );
+    
+    // Calculate position centered on the person (or their head if available)
+    const centerX = selectedBox.headCenterX || (selectedBox.x + selectedBox.width / 2);
+    const centerY = selectedBox.headCenterY || (selectedBox.y + selectedBox.height / 2);
+    
+    return {
+      x: centerX - reframeDimensions.width / 2,
+      y: centerY - reframeDimensions.height / 2,
+      width: reframeDimensions.width,
+      height: reframeDimensions.height
+    };
+  }, [selectedIndex, detections, reframingConfig]);
+
+  // Update overlay when settings change
+  useEffect(() => {
+    if (!overlayCanvasRef.current || detections.length === 0) return;
+    
+    const ctx = overlayCanvasRef.current.getContext('2d');
+    if (!ctx) return;
+    
+    const reframeBox = calculateReframeBox();
+    drawDetections(ctx, detections, reframeBox);
+  }, [detections, drawDetections, calculateReframeBox, showReframeSettings]);
 
   // Handle canvas click
   const handleCanvasClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -251,11 +348,13 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
       ) {
         setSelectedIndex(i);
         onSelectHead(det);
+        setShowReframeSettings(true); // Show settings when person is selected
         
         // Redraw with selection
         const ctx = overlayCanvasRef.current.getContext('2d');
         if (ctx) {
-          drawDetections(ctx, detections);
+          const reframeBox = calculateReframeBox();
+          drawDetections(ctx, detections, reframeBox);
         }
         break;
       }
@@ -269,19 +368,26 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
     }
   }, [videoElement, detectFirstFrame]);
 
+  const handleConfirm = () => {
+    if (selectedIndex !== null) {
+      onConfirm(reframingConfig);
+    }
+  };
+
   return (
     <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-      <h3 className="text-lg font-semibold text-white mb-4">Select Target Person</h3>
+      <h3 className="text-lg font-semibold text-white mb-4">Select Target Person & Configure Reframing</h3>
       
       <div className="mb-4 text-sm text-gray-300">
-        <p>Click on the person you want to track throughout the video.</p>
-        <p>The selected person will be highlighted in green.</p>
+        <p>1. Click on the person you want to track (green = selected)</p>
+        <p>2. Adjust the reframe settings below</p>
+        <p>3. Yellow box shows the reframe preview</p>
       </div>
 
       <div 
         className="relative mb-4 bg-black rounded-lg overflow-hidden flex items-center justify-center"
         style={{ 
-          maxHeight: 'calc(100vh - 400px)',
+          maxHeight: 'calc(100vh - 600px)',
           aspectRatio: videoElement ? `${videoElement.videoWidth}/${videoElement.videoHeight}` : '16/9'
         }}
       >
@@ -304,7 +410,7 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              <span>Detecting heads...</span>
+              <span>Detecting persons...</span>
             </div>
           </div>
         )}
@@ -313,18 +419,97 @@ export function HeadSelector({ videoElement, onSelectHead, onConfirm, confidence
       {detections.length > 0 && (
         <div className="mb-4">
           <p className="text-sm text-gray-300">
-            Found {detections.length} person{detections.length > 1 ? 's' : ''} in the first frame.
+            Found {detections.length} person{detections.length > 1 ? 's' : ''}.
             {selectedIndex !== null && ` Person ${selectedIndex + 1} selected.`}
           </p>
         </div>
       )}
 
+      {/* Reframing Settings - Show when person is selected */}
+      {showReframeSettings && selectedIndex !== null && (
+        <div className="space-y-4 p-4 bg-black/20 rounded-lg border border-white/5">
+          <h4 className="text-md font-semibold text-white">Reframing Settings</h4>
+          
+          {/* Preset Selection */}
+          <div>
+            <label className="block text-sm font-medium text-gray-200 mb-1">Preset</label>
+            <select
+              value={currentPreset}
+              onChange={(e) => handlePresetChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 text-sm"
+            >
+              {Object.keys(REFRAMING_PRESETS).map(preset => (
+                <option key={preset} value={preset}>
+                  {preset.split('-').map(word => 
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                  ).join(' ')}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Output Ratio */}
+          <div>
+            <label className="block text-sm font-medium text-gray-200 mb-1">Output Ratio</label>
+            <div className="grid grid-cols-3 gap-2">
+              {['16:9', '9:16', '1:1', '4:3', '3:4'].map(ratio => (
+                <button
+                  key={ratio}
+                  onClick={() => updateReframingConfig({ outputRatio: ratio as any })}
+                  className={`px-2 py-1 rounded-md text-sm font-medium transition-colors
+                    ${reframingConfig.outputRatio === ratio 
+                      ? 'bg-blue-500 text-white' 
+                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+                >
+                  {ratio}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Smoothness */}
+          <div>
+            <label className="block text-sm font-medium text-gray-200 mb-1">
+              Smoothness: {(reframingConfig.smoothness * 100).toFixed(0)}%
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              value={reframingConfig.smoothness * 100}
+              onChange={(e) => updateReframingConfig({ smoothness: parseFloat(e.target.value) / 100 })}
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          {/* Padding */}
+          <div>
+            <label className="block text-sm font-medium text-gray-200 mb-1">
+              Padding: {(reframingConfig.padding * 100).toFixed(0)}%
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="50"
+              value={reframingConfig.padding * 100}
+              onChange={(e) => updateReframingConfig({ padding: parseFloat(e.target.value) / 100 })}
+              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+            />
+          </div>
+
+          <div className="text-xs text-gray-400 pt-2">
+            <p>• Smoothness: Higher = smoother camera movement</p>
+            <p>• Padding: Higher = more space around subject</p>
+          </div>
+        </div>
+      )}
+
       <button
-        onClick={onConfirm}
+        onClick={handleConfirm}
         disabled={selectedIndex === null}
         className="w-full py-3 px-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-lg
                    hover:from-blue-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed
-                   transition-all transform hover:scale-[1.02]"
+                   transition-all transform hover:scale-[1.02] mt-4"
       >
         Confirm Selection & Start Detection
       </button>

@@ -1,14 +1,17 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { FrameTransform, VideoMetadata } from '@/types';
+import { FrameTransform, VideoMetadata, ReframingConfig } from '@/types';
 import { getOutputDimensions } from '@/lib/reframing/presets';
+import { ReframeSizeCalculatorV2 } from '@/lib/reframing/reframe-size-calculator-v2';
 
 interface TrajectoryEditorProps {
   videoElement: HTMLVideoElement | null;
   transforms: Map<number, FrameTransform>;
   metadata: VideoMetadata;
   outputRatio: string;
+  reframingConfig?: ReframingConfig;
+  initialTargetBox?: { width: number; height: number } | null;
   onUpdateTransform: (frameNumber: number, transform: FrameTransform) => void;
   onConfirm: () => void;
 }
@@ -18,6 +21,8 @@ export function TrajectoryEditor({
   transforms,
   metadata,
   outputRatio,
+  reframingConfig,
+  initialTargetBox,
   onUpdateTransform,
   onConfirm
 }: TrajectoryEditorProps) {
@@ -60,13 +65,39 @@ export function TrajectoryEditor({
       rotation: 0
     };
 
-    // Calculate crop rectangle - maintain consistent aspect ratio
-    const aspectRatio = outputWidth / outputHeight;
+    // Calculate crop rectangle using the exact same method as during reframing
+    const outputAspectRatio = outputWidth / outputHeight;
     
-    // Calculate consistent dimensions based on scale
-    const frameArea = metadata.width / transform.scale;
-    const cropW = frameArea;
-    const cropH = frameArea / aspectRatio;
+    let cropW: number, cropH: number;
+    
+    // If we have the initial target box and reframing config, calculate the exact dimensions
+    if (initialTargetBox && reframingConfig) {
+      // Use the same calculator that was used during reframing with the actual initial target box
+      const calculatedDimensions = ReframeSizeCalculatorV2.calculateOptimalReframeSize(
+        initialTargetBox,
+        metadata.width,
+        metadata.height,
+        outputAspectRatio,
+        reframingConfig
+      );
+      cropW = calculatedDimensions.width;
+      cropH = calculatedDimensions.height;
+      
+      // Debug log to verify consistency
+      if (currentFrame % 30 === 0) {
+        const scaleFromTransform = metadata.width / (metadata.width / transform.scale);
+        console.log(`TrajectoryEditor Frame ${currentFrame}:`);
+        console.log(`  Initial target box: ${initialTargetBox.width}x${initialTargetBox.height}`);
+        console.log(`  Calculated dimensions: ${cropW.toFixed(0)}x${cropH.toFixed(0)}`);
+        console.log(`  Scale from transform: ${transform.scale.toFixed(2)}, dimensions from scale: ${(metadata.width/transform.scale).toFixed(0)}x${(metadata.height/transform.scale).toFixed(0)}`);
+        console.log(`  Config: padding=${(reframingConfig.padding * 100).toFixed(0)}%, outputRatio=${reframingConfig.outputRatio}`);
+      }
+    } else {
+      // Fallback to scale-based calculation
+      cropW = metadata.width / transform.scale;
+      cropH = metadata.height / transform.scale;
+      console.warn('TrajectoryEditor: No initial target box provided, using scale-based calculation');
+    }
     
     const cropX = transform.x - cropW / 2;
     const cropY = transform.y - cropH / 2;
@@ -113,7 +144,7 @@ export function TrajectoryEditor({
         }
       }
     });
-  }, [videoElement, currentFrame, transforms, metadata, outputWidth, outputHeight, keyframes, selectedKeyframe]);
+  }, [videoElement, currentFrame, transforms, metadata, outputWidth, outputHeight, keyframes, selectedKeyframe, reframingConfig, initialTargetBox]);
 
   // Update display when frame changes
   useEffect(() => {
@@ -164,10 +195,27 @@ export function TrajectoryEditor({
       rotation: 0
     };
 
+    // Calculate bounds based on the actual reframe dimensions
+    let boundsWidth = outputWidth;
+    let boundsHeight = outputHeight;
+    
+    if (initialTargetBox && reframingConfig) {
+      const outputAspectRatio = outputWidth / outputHeight;
+      const calculatedDimensions = ReframeSizeCalculatorV2.calculateOptimalReframeSize(
+        initialTargetBox,
+        metadata.width,
+        metadata.height,
+        outputAspectRatio,
+        reframingConfig
+      );
+      boundsWidth = calculatedDimensions.width;
+      boundsHeight = calculatedDimensions.height;
+    }
+
     const newTransform: FrameTransform = {
       ...currentTransform,
-      x: Math.max(outputWidth / 2, Math.min(metadata.width - outputWidth / 2, x)),
-      y: Math.max(outputHeight / 2, Math.min(metadata.height - outputHeight / 2, y))
+      x: Math.max(boundsWidth / 2, Math.min(metadata.width - boundsWidth / 2, x)),
+      y: Math.max(boundsHeight / 2, Math.min(metadata.height - boundsHeight / 2, y))
     };
 
     onUpdateTransform(selectedKeyframe, newTransform);

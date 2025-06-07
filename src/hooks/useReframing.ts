@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ReframingEngine } from '@/lib/reframing/engine';
-import { FFmpegExporter } from '@/lib/video/ffmpeg-exporter';
 import { SimpleExporter } from '@/lib/video/simple-exporter';
 import { 
   ReframingConfig, 
@@ -20,9 +19,9 @@ export function useReframing() {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
   const [currentPreset, setCurrentPreset] = useState('instagram-reel');
+  const [storedInitialTargetBox, setStoredInitialTargetBox] = useState<{ width: number; height: number } | undefined>();
   
   const engineRef = useRef<ReframingEngine | null>(null);
-  const ffmpegExporterRef = useRef<FFmpegExporter | null>(null);
   const simpleExporterRef = useRef<SimpleExporter | null>(null);
 
   // Initialize reframing engine
@@ -40,10 +39,14 @@ export function useReframing() {
   const processReframing = useCallback(async (
     detections: Detection[],
     selectedTrack: TrackedObject | null,
-    metadata: VideoMetadata
+    metadata: VideoMetadata,
+    initialTargetBox?: { width: number; height: number }
   ) => {
-    // Create new engine (always uses ByteTrack)
-    engineRef.current = new ReframingEngine(config, true);
+    // Store initial target box for export
+    setStoredInitialTargetBox(initialTargetBox);
+    
+    // Create new engine
+    engineRef.current = new ReframingEngine(config, initialTargetBox);
 
     setIsProcessing(true);
     try {
@@ -93,59 +96,27 @@ export function useReframing() {
     try {
       let blob: Blob;
       
-      // Try FFmpeg first if MP4 is requested
+      // Use SimpleExporter
+      console.log('Using SimpleExporter for video export');
       if (options.format === 'mp4') {
-        try {
-          console.log('Trying FFmpeg export...');
-          const response = await fetch(videoElement.src);
-          const videoBlob = await response.blob();
-          
-          if (!ffmpegExporterRef.current) {
-            ffmpegExporterRef.current = new FFmpegExporter();
-          }
-          
-          blob = await ffmpegExporterRef.current.export(
-            videoBlob,
-            transforms,
-            metadata,
-            config.outputRatio,
-            options,
-            (progress) => setExportProgress(progress)
-          );
-        } catch (ffmpegError) {
-          console.error('FFmpeg export failed, falling back to simple export:', ffmpegError);
-          // Fall back to simple export
-          options.format = 'webm'; // Force WebM for fallback
-          
-          if (!simpleExporterRef.current) {
-            simpleExporterRef.current = new SimpleExporter();
-          }
-          
-          blob = await simpleExporterRef.current.export(
-            videoElement,
-            transforms,
-            metadata,
-            config.outputRatio,
-            options,
-            (progress) => setExportProgress(progress)
-          );
-        }
-      } else {
-        // Use simple export for WebM
-        console.log('Using simple export for WebM...');
-        if (!simpleExporterRef.current) {
-          simpleExporterRef.current = new SimpleExporter();
-        }
-        
-        blob = await simpleExporterRef.current.export(
-          videoElement,
-          transforms,
-          metadata,
-          config.outputRatio,
-          options,
-          (progress) => setExportProgress(progress)
-        );
+        console.log('MP4 format requested, but only WebM is supported. Using WebM instead.');
+        options.format = 'webm'; // Force WebM
       }
+      
+      if (!simpleExporterRef.current) {
+        simpleExporterRef.current = new SimpleExporter();
+      }
+      
+      blob = await simpleExporterRef.current.export(
+        videoElement,
+        transforms,
+        metadata,
+        config.outputRatio,
+        options,
+        (progress) => setExportProgress(progress),
+        config,
+        storedInitialTargetBox
+      );
 
       return blob;
     } finally {

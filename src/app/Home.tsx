@@ -24,6 +24,7 @@ export default function Home() {
   const [showHeadSelector, setShowHeadSelector] = useState(false);
   const [showTrajectoryEditor, setShowTrajectoryEditor] = useState(false);
   const [selectedTrackIdForByteTrack, setSelectedTrackIdForByteTrack] = useState<string | null>(null);
+  const [initialTargetBox, setInitialTargetBox] = useState<{ width: number; height: number } | null>(null);
 
   const {
     videoFile,
@@ -130,9 +131,10 @@ export default function Home() {
       return;
     }
     
-    await processReframing(detections, selectedTrack, metadata);
+    // Pass the initial target box dimensions if available
+    await processReframing(detections, selectedTrack, metadata, initialTargetBox || undefined);
     setShowTrajectoryEditor(true);
-  }, [metadata, detections, getSelectedTrack, processReframing, updateConfig]);
+  }, [metadata, detections, getSelectedTrack, processReframing, updateConfig, initialTargetBox]);
 
   const handleTrajectoryConfirm = useCallback(() => {
     setShowTrajectoryEditor(false);
@@ -182,6 +184,10 @@ export default function Home() {
       }
     }
     
+    // Store initial target box dimensions
+    setInitialTargetBox({ width: box.width, height: box.height });
+    console.log('Initial target box dimensions:', box.width, 'x', box.height);
+    
     // Create a Detection object with the selected box (including head center info)
     const detection = {
       frameNumber: 0,
@@ -191,10 +197,14 @@ export default function Home() {
     setTargetHead(detection);
   }, [setTargetHead]);
 
-  const handleHeadSelectorConfirm = useCallback(() => {
+  const handleHeadSelectorConfirm = useCallback((reframingConfig?: any) => {
+    // Apply reframing config if provided
+    if (reframingConfig) {
+      updateConfig(reframingConfig);
+    }
     setShowHeadSelector(false);
     handleDetection();
-  }, [handleDetection]);
+  }, [handleDetection, updateConfig]);
 
 
   const handleReset = useCallback(() => {
@@ -314,6 +324,8 @@ export default function Home() {
                   showDetections={showDetections}
                   showReframing={showReframing && detectionComplete}
                   outputRatio={config.outputRatio}
+                  reframingConfig={config}
+                  initialTargetBox={initialTargetBox}
                 />
               </div>
             </div>
@@ -380,20 +392,27 @@ export default function Home() {
                 {/* ByteTrack is always enabled for consistency */}
               </div>
 
-              {/* Reframing Controls */}
+              {/* Reframing Button - Show after detection is complete */}
               {detectionComplete && !showTrajectoryEditor && (
                 <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
-                  <ReframingControls
-                    config={config}
-                    currentPreset={currentPreset}
-                    trackedObjects={trackedObjects}
-                    selectedTrackId={selectedTrackId}
-                    onConfigChange={updateConfig}
-                    onPresetChange={applyPreset}
-                    onTrackSelect={selectTrack}
-                    onProcess={handleReframing}
-                    isProcessing={isReframingProcessing}
-                  />
+                  <h3 className="text-lg font-semibold text-white mb-4">Apply Reframing</h3>
+                  <div className="mb-4 text-sm text-gray-300">
+                    <p>Selected person: {selectedTrackId ? `Track ID ${selectedTrackId}` : 'None'}</p>
+                    <p>Output ratio: {config.outputRatio}</p>
+                    <p>Padding: {(config.padding * 100).toFixed(0)}%</p>
+                    <p>Smoothness: {(config.smoothness * 100).toFixed(0)}%</p>
+                  </div>
+                  <button
+                    onClick={handleReframing}
+                    disabled={isReframingProcessing || !selectedTrackId}
+                    className="w-full py-3 px-4 bg-green-500 text-white font-medium rounded-md
+                               hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed
+                               transition-colors"
+                  >
+                    {isReframingProcessing ? 'Processing...' : 
+                     !selectedTrackId ? 'Select a Person First' : 
+                     'Apply Reframing'}
+                  </button>
                 </div>
               )}
 
@@ -404,6 +423,8 @@ export default function Home() {
                   transforms={transforms}
                   metadata={metadata}
                   outputRatio={config.outputRatio}
+                  reframingConfig={config}
+                  initialTargetBox={initialTargetBox}
                   onUpdateTransform={updateTransform}
                   onConfirm={handleTrajectoryConfirm}
                 />
@@ -423,6 +444,8 @@ export default function Home() {
                 showDetections={false}
                 showReframing={true}
                 outputRatio={config.outputRatio}
+                reframingConfig={config}
+                initialTargetBox={initialTargetBox}
               />
             </div>
             

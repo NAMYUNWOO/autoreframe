@@ -51,9 +51,13 @@ export class TrajectoryInterpolator {
         const interpolatedBox = this.interpolateFrame(frame, existingPoints, targetTrackId);
         if (interpolatedBox) {
           // Create a new detection with the interpolated box
-          const timestamp = existingDetectionMap.size > 0 
-            ? frame * (existingDetectionMap.values().next().value.timestamp / existingDetectionMap.values().next().value.frameNumber)
-            : frame / 30;
+          let timestamp = frame / 30; // Default to 30fps
+          if (existingDetectionMap.size > 0) {
+            const firstDetection = existingDetectionMap.values().next().value;
+            if (firstDetection && firstDetection.frameNumber > 0) {
+              timestamp = frame * (firstDetection.timestamp / firstDetection.frameNumber);
+            }
+          }
             
           interpolatedDetections.push({
             frameNumber: frame,
@@ -62,9 +66,13 @@ export class TrajectoryInterpolator {
           });
         } else {
           // If we can't interpolate, create empty detection to maintain frame continuity
-          const timestamp = existingDetectionMap.size > 0 
-            ? frame * (existingDetectionMap.values().next().value.timestamp / existingDetectionMap.values().next().value.frameNumber)
-            : frame / 30;
+          let timestamp = frame / 30; // Default to 30fps
+          if (existingDetectionMap.size > 0) {
+            const firstDetection = existingDetectionMap.values().next().value;
+            if (firstDetection && firstDetection.frameNumber > 0) {
+              timestamp = frame * (firstDetection.timestamp / firstDetection.frameNumber);
+            }
+          }
             
           interpolatedDetections.push({
             frameNumber: frame,

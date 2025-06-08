@@ -151,7 +151,7 @@ export default function Home() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const extension = options.format === 'mp4' ? 'mp4' : 'webm';
+      const extension = options.format;
       a.download = `reframed_${videoFile?.name || 'video'}.${extension}`;
       a.click();
       URL.revokeObjectURL(url);
@@ -363,8 +363,6 @@ export default function Home() {
                   onSelectHead={handleHeadSelect}
                   onConfirm={handleHeadSelectorConfirm}
                   confidenceThreshold={confidenceThreshold}
-                  showDetections={showDetections}
-                  onToggleDetections={() => setShowDetections(!showDetections)}
                   onConfidenceChange={handleConfidenceChange}
                 />
               )}

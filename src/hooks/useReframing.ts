@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ReframingEngine } from '@/lib/reframing/engine';
 import { SimpleExporter } from '@/lib/video/simple-exporter';
+import { FFmpegExporter } from '@/lib/video/ffmpeg-exporter';
 import { 
   ReframingConfig, 
   FrameTransform, 
@@ -13,16 +14,22 @@ import {
 import { REFRAMING_PRESETS } from '@/lib/reframing/presets';
 
 export function useReframing() {
-  const [config, setConfig] = useState<ReframingConfig>(REFRAMING_PRESETS['instagram-reel']);
+  const [config, setConfig] = useState<ReframingConfig>({
+    outputRatio: '9:16',
+    padding: 0.3,
+    smoothness: 0.7,
+    targetSelection: 'manual'
+  });
   const [transforms, setTransforms] = useState<Map<number, FrameTransform>>(new Map());
   const [isProcessing, setIsProcessing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
-  const [currentPreset, setCurrentPreset] = useState('instagram-reel');
+  const [currentPreset, setCurrentPreset] = useState('custom');
   const [storedInitialTargetBox, setStoredInitialTargetBox] = useState<{ width: number; height: number } | undefined>();
   
   const engineRef = useRef<ReframingEngine | null>(null);
   const simpleExporterRef = useRef<SimpleExporter | null>(null);
+  const ffmpegExporterRef = useRef<FFmpegExporter | null>(null);
 
   // Initialize reframing engine
   useEffect(() => {
@@ -96,25 +103,39 @@ export function useReframing() {
     try {
       let blob: Blob;
       
-      // Use SimpleExporter
-      if (options.format === 'mp4') {
-        options.format = 'webm'; // Force WebM
+      // Use FFmpegExporter for MOV and MP4, SimpleExporter for WebM
+      if (options.format === 'mov' || options.format === 'mp4') {
+        if (!ffmpegExporterRef.current) {
+          ffmpegExporterRef.current = new FFmpegExporter();
+        }
+        
+        blob = await ffmpegExporterRef.current.export(
+          videoElement,
+          transforms,
+          metadata,
+          config.outputRatio,
+          options,
+          (progress) => setExportProgress(progress),
+          config,
+          storedInitialTargetBox
+        );
+      } else {
+        // Use SimpleExporter for WebM
+        if (!simpleExporterRef.current) {
+          simpleExporterRef.current = new SimpleExporter();
+        }
+        
+        blob = await simpleExporterRef.current.export(
+          videoElement,
+          transforms,
+          metadata,
+          config.outputRatio,
+          options,
+          (progress) => setExportProgress(progress),
+          config,
+          storedInitialTargetBox
+        );
       }
-      
-      if (!simpleExporterRef.current) {
-        simpleExporterRef.current = new SimpleExporter();
-      }
-      
-      blob = await simpleExporterRef.current.export(
-        videoElement,
-        transforms,
-        metadata,
-        config.outputRatio,
-        options,
-        (progress) => setExportProgress(progress),
-        config,
-        storedInitialTargetBox
-      );
 
       return blob;
     } finally {

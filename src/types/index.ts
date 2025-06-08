@@ -56,7 +56,7 @@ export interface ProcessingStatus {
 }
 
 export interface ExportOptions {
-  format: 'mp4' | 'webm';
+  format: 'mp4' | 'webm' | 'mov';
   quality: number;
   codec: string;
   bitrate?: number;

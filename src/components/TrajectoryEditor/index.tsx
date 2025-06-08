@@ -30,8 +30,12 @@ export function TrajectoryEditor({
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [currentFrame, setCurrentFrame] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
-  const [selectedKeyframe, setSelectedKeyframe] = useState<number | null>(null);
-  const [keyframes, setKeyframes] = useState<Set<number>>(new Set());
+  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
+  const [originalTransform, setOriginalTransform] = useState<FrameTransform | null>(null);
+  
+  // Interpolation state
+  const [startFrame, setStartFrame] = useState<number | null>(null);
+  const [endFrame, setEndFrame] = useState<number | null>(null);
 
   // Initialize on mount - moved after drawFrame definition
   const [isInitialized, setIsInitialized] = useState(false);
@@ -98,11 +102,64 @@ export function TrajectoryEditor({
     const cropY = transform.y - cropH / 2;
 
     // Draw reframe rectangle
-    overlayCtx.strokeStyle = keyframes.has(currentFrame) ? '#00ff00' : '#ffff00';
+    overlayCtx.strokeStyle = '#ffff00';
     overlayCtx.lineWidth = 3;
     overlayCtx.strokeRect(cropX, cropY, cropW, cropH);
 
-    // Draw center point (reframe box center)
+    // Draw nearby frame centers (before current frame)
+    for (let i = 1; i <= 3; i++) {
+      const prevFrame = currentFrame - i;
+      if (prevFrame >= 0) {
+        const prevTransform = transforms.get(prevFrame);
+        if (prevTransform) {
+          overlayCtx.strokeStyle = '#ff0000'; // Red border
+          overlayCtx.lineWidth = 2;
+          
+          // Fill color transitions from white to light red
+          if (i === 1) {
+            overlayCtx.fillStyle = '#ffcccc'; // 약간 연한 빨강
+          } else if (i === 2) {
+            overlayCtx.fillStyle = '#ffe6e6'; // 연한 빨강
+          } else {
+            overlayCtx.fillStyle = '#ffffff'; // 흰색
+          }
+          
+          overlayCtx.beginPath();
+          overlayCtx.arc(prevTransform.x, prevTransform.y, 6, 0, Math.PI * 2);
+          overlayCtx.fill();
+          overlayCtx.stroke();
+        }
+      }
+    }
+
+    // Draw nearby frame centers (after current frame)
+    for (let i = 1; i <= 3; i++) {
+      const nextFrame = currentFrame + i;
+      const maxFrame = Math.floor(metadata.duration * metadata.fps);
+      if (nextFrame <= maxFrame) {
+        const nextTransform = transforms.get(nextFrame);
+        if (nextTransform) {
+          overlayCtx.strokeStyle = '#ff0000'; // Red border
+          overlayCtx.lineWidth = 2;
+          
+          // Fill color transitions from dark red to black
+          if (i === 1) {
+            overlayCtx.fillStyle = '#cc0000'; // 검정이 약간 들어간 빨강
+          } else if (i === 2) {
+            overlayCtx.fillStyle = '#660000'; // 검정이 많이 들어간 빨강
+          } else {
+            overlayCtx.fillStyle = '#000000'; // 검정
+          }
+          
+          overlayCtx.beginPath();
+          overlayCtx.arc(nextTransform.x, nextTransform.y, 6, 0, Math.PI * 2);
+          overlayCtx.fill();
+          overlayCtx.stroke();
+        }
+      }
+    }
+
+    // Draw center point (reframe box center) - current frame
     overlayCtx.fillStyle = '#ff0000';
     overlayCtx.beginPath();
     overlayCtx.arc(transform.x, transform.y, 8, 0, Math.PI * 2);
@@ -154,18 +211,60 @@ export function TrajectoryEditor({
     }
     overlayCtx.stroke();
     overlayCtx.setLineDash([]);
-
-    // Draw keyframe indicators
-    keyframes.forEach(frame => {
-      if (Math.abs(frame - currentFrame) <= 30) {
-        const t = transforms.get(frame);
-        if (t) {
-          overlayCtx.fillStyle = frame === selectedKeyframe ? '#00ff00' : '#ffff00';
-          overlayCtx.fillRect(t.x - 4, t.y - 4, 8, 8);
-        }
+    
+    // Draw Start and End frame markers if set
+    if (startFrame !== null) {
+      const transformStart = transforms.get(startFrame);
+      if (transformStart) {
+        overlayCtx.strokeStyle = '#00ff00'; // Green for Start Frame
+        overlayCtx.lineWidth = 3;
+        overlayCtx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+        overlayCtx.beginPath();
+        overlayCtx.arc(transformStart.x, transformStart.y, 12, 0, Math.PI * 2);
+        overlayCtx.fill();
+        overlayCtx.stroke();
+        
+        // Label
+        overlayCtx.fillStyle = '#00ff00';
+        overlayCtx.font = 'bold 14px Arial';
+        overlayCtx.fillText('Start', transformStart.x - 15, transformStart.y - 15);
       }
-    });
-  }, [videoElement, currentFrame, transforms, metadata, outputWidth, outputHeight, keyframes, selectedKeyframe, reframingConfig, initialTargetBox]);
+    }
+    
+    if (endFrame !== null) {
+      const transformEnd = transforms.get(endFrame);
+      if (transformEnd) {
+        overlayCtx.strokeStyle = '#0088ff'; // Blue for End Frame
+        overlayCtx.lineWidth = 3;
+        overlayCtx.fillStyle = 'rgba(0, 136, 255, 0.3)';
+        overlayCtx.beginPath();
+        overlayCtx.arc(transformEnd.x, transformEnd.y, 12, 0, Math.PI * 2);
+        overlayCtx.fill();
+        overlayCtx.stroke();
+        
+        // Label
+        overlayCtx.fillStyle = '#0088ff';
+        overlayCtx.font = 'bold 14px Arial';
+        overlayCtx.fillText('End', transformEnd.x - 10, transformEnd.y - 15);
+      }
+    }
+    
+    // Draw interpolation line between Start and End if both are set
+    if (startFrame !== null && endFrame !== null) {
+      const transformStart = transforms.get(startFrame);
+      const transformEnd = transforms.get(endFrame);
+      if (transformStart && transformEnd) {
+        overlayCtx.strokeStyle = 'rgba(128, 128, 128, 0.5)';
+        overlayCtx.lineWidth = 2;
+        overlayCtx.setLineDash([5, 5]);
+        overlayCtx.beginPath();
+        overlayCtx.moveTo(transformStart.x, transformStart.y);
+        overlayCtx.lineTo(transformEnd.x, transformEnd.y);
+        overlayCtx.stroke();
+        overlayCtx.setLineDash([]);
+      }
+    }
+  }, [videoElement, currentFrame, transforms, metadata, outputWidth, outputHeight, reframingConfig, initialTargetBox, startFrame, endFrame]);
 
   // Update display when frame changes
   useEffect(() => {
@@ -208,41 +307,50 @@ export function TrajectoryEditor({
     const x = (e.clientX - rect.left) / rect.width * metadata.width;
     const y = (e.clientY - rect.top) / rect.height * metadata.height;
 
-    // Check if clicking on a keyframe
-    let clickedKeyframe: number | null = null;
-    keyframes.forEach(frame => {
-      const t = transforms.get(frame);
-      if (t && Math.abs(t.x - x) < 20 && Math.abs(t.y - y) < 20) {
-        clickedKeyframe = frame;
-      }
-    });
+    // Get current transform
+    const currentTransform = transforms.get(currentFrame);
+    if (!currentTransform) return;
 
-    if (clickedKeyframe !== null) {
-      setSelectedKeyframe(clickedKeyframe);
-      setCurrentFrame(clickedKeyframe);
+    // Calculate reframe box dimensions
+    const outputAspectRatio = outputWidth / outputHeight;
+    let cropW: number, cropH: number;
+    
+    if (initialTargetBox && reframingConfig) {
+      const calculatedDimensions = ReframeSizeCalculatorV2.calculateOptimalReframeSize(
+        initialTargetBox,
+        metadata.width,
+        metadata.height,
+        outputAspectRatio,
+        reframingConfig
+      );
+      cropW = calculatedDimensions.width;
+      cropH = calculatedDimensions.height;
     } else {
-      // Add new keyframe at current position
-      setKeyframes(prev => new Set([...prev, currentFrame]));
-      setSelectedKeyframe(currentFrame);
+      cropW = metadata.width / currentTransform.scale;
+      cropH = metadata.height / currentTransform.scale;
     }
+    
+    const cropX = currentTransform.x - cropW / 2;
+    const cropY = currentTransform.y - cropH / 2;
 
-    setIsDragging(true);
+    // Check if clicking inside the reframe box
+    if (x >= cropX && x <= cropX + cropW && y >= cropY && y <= cropY + cropH) {
+      setIsDragging(true);
+      setDragStartPos({ x, y });
+      setOriginalTransform({ ...currentTransform });
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDragging || selectedKeyframe === null || !overlayCanvasRef.current) return;
+    if (!isDragging || !dragStartPos || !originalTransform || !overlayCanvasRef.current) return;
 
     const rect = overlayCanvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / rect.width * metadata.width;
-    const y = (e.clientY - rect.top) / rect.height * metadata.height;
+    const mouseX = (e.clientX - rect.left) / rect.width * metadata.width;
+    const mouseY = (e.clientY - rect.top) / rect.height * metadata.height;
 
-    // Update transform
-    const currentTransform = transforms.get(selectedKeyframe) || {
-      x: metadata.width / 2,
-      y: metadata.height / 2,
-      scale: 1,
-      rotation: 0
-    };
+    // Calculate movement delta
+    const deltaX = mouseX - dragStartPos.x;
+    const deltaY = mouseY - dragStartPos.y;
 
     // Calculate bounds based on the actual reframe dimensions
     let boundsWidth = outputWidth;
@@ -261,18 +369,26 @@ export function TrajectoryEditor({
       boundsHeight = calculatedDimensions.height;
     }
 
+    // Apply delta to original position
+    const newX = originalTransform.x + deltaX;
+    const newY = originalTransform.y + deltaY;
+
+    // Calculate new position with bounds checking
     const newTransform: FrameTransform = {
-      ...currentTransform,
-      x: Math.max(boundsWidth / 2, Math.min(metadata.width - boundsWidth / 2, x)),
-      y: Math.max(boundsHeight / 2, Math.min(metadata.height - boundsHeight / 2, y))
+      ...originalTransform,
+      x: Math.max(boundsWidth / 2, Math.min(metadata.width - boundsWidth / 2, newX)),
+      y: Math.max(boundsHeight / 2, Math.min(metadata.height - boundsHeight / 2, newY))
     };
 
-    onUpdateTransform(selectedKeyframe, newTransform);
+    // Update the transform for the current frame
+    onUpdateTransform(currentFrame, newTransform);
     drawFrame();
   };
 
   const handleMouseUp = () => {
     setIsDragging(false);
+    setDragStartPos(null);
+    setOriginalTransform(null);
   };
 
   // Handle timeline scrubbing
@@ -283,62 +399,69 @@ export function TrajectoryEditor({
       videoElement.currentTime = frame / metadata.fps;
     }
   };
-
-  // Add keyframe
-  const addKeyframe = () => {
-    setKeyframes(prev => new Set([...prev, currentFrame]));
+  
+  // Set Start Frame
+  const setStartFrameHandler = () => {
+    setStartFrame(currentFrame);
   };
-
-  // Remove keyframe
-  const removeKeyframe = () => {
-    if (selectedKeyframe !== null) {
-      setKeyframes(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(selectedKeyframe);
-        return newSet;
-      });
-      setSelectedKeyframe(null);
-    }
+  
+  // Set End Frame
+  const setEndFrameHandler = () => {
+    setEndFrame(currentFrame);
   };
-
-  // Interpolate between keyframes
-  const interpolateKeyframes = () => {
-    const sortedKeyframes = Array.from(keyframes).sort((a, b) => a - b);
+  
+  // Clear interpolation frames
+  const clearInterpolationFrames = () => {
+    setStartFrame(null);
+    setEndFrame(null);
+  };
+  
+  // Perform interpolation
+  const interpolateFrames = () => {
+    if (startFrame === null || endFrame === null) return;
+    if (startFrame === endFrame) return;
     
-    for (let i = 0; i < sortedKeyframes.length - 1; i++) {
-      const startFrame = sortedKeyframes[i];
-      const endFrame = sortedKeyframes[i + 1];
-      const startTransform = transforms.get(startFrame);
-      const endTransform = transforms.get(endFrame);
-
-      if (startTransform && endTransform) {
-        for (let frame = startFrame + 1; frame < endFrame; frame++) {
-          const t = (frame - startFrame) / (endFrame - startFrame);
-          const interpolated: FrameTransform = {
-            x: startTransform.x + (endTransform.x - startTransform.x) * t,
-            y: startTransform.y + (endTransform.y - startTransform.y) * t,
-            scale: startTransform.scale + (endTransform.scale - startTransform.scale) * t,
-            rotation: 0
-          };
-          onUpdateTransform(frame, interpolated);
-        }
-      }
+    const firstFrame = Math.min(startFrame, endFrame);
+    const lastFrame = Math.max(startFrame, endFrame);
+    
+    const transformStart = transforms.get(firstFrame);
+    const transformEnd = transforms.get(lastFrame);
+    
+    if (!transformStart || !transformEnd) return;
+    
+    // Interpolate all frames between start and end
+    for (let frame = firstFrame + 1; frame < lastFrame; frame++) {
+      const t = (frame - firstFrame) / (lastFrame - firstFrame);
+      
+      const interpolatedTransform: FrameTransform = {
+        x: transformStart.x + (transformEnd.x - transformStart.x) * t,
+        y: transformStart.y + (transformEnd.y - transformStart.y) * t,
+        scale: transformStart.scale + (transformEnd.scale - transformStart.scale) * t,
+        rotation: 0
+      };
+      
+      onUpdateTransform(frame, interpolatedTransform);
     }
+    
+    // Clear selection after interpolation
+    clearInterpolationFrames();
+    drawFrame();
   };
+
 
   return (
     <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
       <h3 className="text-lg font-semibold text-white mb-4">Trajectory Editor</h3>
       
       <div className="mb-4 text-sm text-gray-300">
-        <p>• Click to add keyframes (green squares)</p>
-        <p>• Drag keyframes to adjust position</p>
-        <p>• Yellow box shows current reframe area</p>
-        <p>• Red dot: reframe box center</p>
+        <p>• Drag the yellow box to adjust reframe position</p>
+        <p>• Use timeline to navigate frames</p>
+        <p>• Red dot: current frame reframe center</p>
+        <p>• Black dots with red border: nearby frames (±3) reframe centers</p>
         {reframingConfig?.reframeBoxOffset && (
           <p>• Green crosshair: target person position</p>
         )}
-        <p>• Cyan line shows trajectory path</p>
+        <p>• Cyan line shows trajectory path (±30 frames)</p>
       </div>
 
       <div 
@@ -382,29 +505,55 @@ export function TrajectoryEditor({
           className="w-full"
         />
       </div>
-
-      {/* Controls */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={addKeyframe}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-        >
-          Add Keyframe
-        </button>
-        <button
-          onClick={removeKeyframe}
-          disabled={selectedKeyframe === null}
-          className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
-        >
-          Remove Keyframe
-        </button>
-        <button
-          onClick={interpolateKeyframes}
-          disabled={keyframes.size < 2}
-          className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors disabled:opacity-50"
-        >
-          Interpolate
-        </button>
+      
+      {/* Interpolation Controls */}
+      <div className="mb-4 p-4 bg-black/20 rounded-lg">
+        <h4 className="text-sm font-medium text-gray-200 mb-3">Linear Interpolation</h4>
+        <div className="flex gap-2 mb-2">
+          <button
+            onClick={setStartFrameHandler}
+            className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
+              startFrame === currentFrame 
+                ? 'bg-green-500 text-white' 
+                : 'bg-white/10 hover:bg-white/20 text-white'
+            }`}
+          >
+            {startFrame !== null ? `Start Frame: ${startFrame}` : 'Set Start Frame'}
+          </button>
+          <button
+            onClick={setEndFrameHandler}
+            className={`flex-1 px-3 py-2 text-sm rounded-lg transition-colors ${
+              endFrame === currentFrame 
+                ? 'bg-blue-500 text-white' 
+                : 'bg-white/10 hover:bg-white/20 text-white'
+            }`}
+          >
+            {endFrame !== null ? `End Frame: ${endFrame}` : 'Set End Frame'}
+          </button>
+        </div>
+        {startFrame !== null && endFrame !== null && startFrame !== endFrame && (
+          <div className="text-xs text-gray-400 mb-2">
+            Will interpolate {Math.abs(endFrame - startFrame) - 1} frames between start ({Math.min(startFrame, endFrame)}) and end ({Math.max(startFrame, endFrame)})
+          </div>
+        )}
+        <div className="flex gap-2">
+          <button
+            onClick={interpolateFrames}
+            disabled={startFrame === null || endFrame === null || startFrame === endFrame}
+            className="flex-1 px-3 py-2 bg-gradient-to-r from-green-500 to-blue-500 text-white text-sm rounded-lg
+                     hover:from-green-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            Interpolate
+          </button>
+          <button
+            onClick={clearInterpolationFrames}
+            disabled={startFrame === null && endFrame === null}
+            className="px-3 py-2 bg-white/10 hover:bg-white/20 text-white text-sm rounded-lg transition-colors
+                     disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Clear
+          </button>
+        </div>
       </div>
 
       <button

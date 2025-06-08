@@ -9,8 +9,6 @@ interface HeadSelectorProps {
   onSelectHead: (box: BoundingBox) => void;
   onConfirm: (reframingConfig?: ReframingConfig) => void;
   confidenceThreshold?: number;
-  showDetections?: boolean;
-  onToggleDetections?: () => void;
   onConfidenceChange?: (value: number) => void;
 }
 
@@ -19,8 +17,6 @@ export function HeadSelector({
   onSelectHead, 
   onConfirm, 
   confidenceThreshold = 0.3,
-  showDetections = true,
-  onToggleDetections,
   onConfidenceChange
 }: HeadSelectorProps) {
   const [detections, setDetections] = useState<BoundingBox[]>([]);
@@ -34,28 +30,15 @@ export function HeadSelector({
   
   // Reframing settings state
   const [reframingConfig, setReframingConfig] = useState<ReframingConfig>({
-    outputRatio: '16:9',
+    outputRatio: '9:16',
     padding: 0.3,
     smoothness: 0.7
   });
-  const [currentPreset, setCurrentPreset] = useState<string>('smooth-follow');
   const [reframeBoxSize, setReframeBoxSize] = useState(1.0); // 1.0 = default size, 0.5 = smaller, 1.5 = larger
   const [reframeBoxOffset, setReframeBoxOffset] = useState({ x: 0, y: 0 }); // Offset from center
   const [isDraggingReframeBox, setIsDraggingReframeBox] = useState(false);
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
 
-  // Apply preset
-  const handlePresetChange = (preset: string) => {
-    setCurrentPreset(preset);
-    const presetConfig = REFRAMING_PRESETS[preset];
-    if (presetConfig) {
-      setReframingConfig({
-        ...reframingConfig,
-        ...presetConfig,
-        outputRatio: reframingConfig.outputRatio // Preserve output ratio
-      });
-    }
-  };
 
   // Update reframing config
   const updateReframingConfig = (updates: Partial<ReframingConfig>) => {
@@ -267,9 +250,8 @@ export function HeadSelector({
       ctx.stroke();
     }
     
-    // Only draw detections if showDetections is true
-    if (showDetections) {
-      detections.forEach((detection, index) => {
+    // Always draw detections
+    detections.forEach((detection, index) => {
         const isSelected = index === selectedIndex;
         
         // Draw bounding box
@@ -310,10 +292,9 @@ export function HeadSelector({
           ctx.moveTo(detection.headCenterX, detection.headCenterY - 10);
           ctx.lineTo(detection.headCenterX, detection.headCenterY + 10);
           ctx.stroke();
-        }
-      });
-    }
-  }, [selectedIndex, activeTab, isDraggingReframeBox, showDetections]);
+      }
+    });
+  }, [selectedIndex, activeTab, isDraggingReframeBox]);
 
   // Calculate reframe box preview
   const calculateReframeBox = useCallback(() => {
@@ -487,7 +468,7 @@ export function HeadSelector({
         <button
           onClick={() => selectedIndex !== null && setActiveTab('reframe')}
           disabled={selectedIndex === null}
-          className={`px-4 py-2 text-sm font-medium transition-colors ml-4 ${
+          className={`px-4 py-2 text-sm font-medium transition-colors ml-4 relative ${
             activeTab === 'reframe' 
               ? 'text-white border-b-2 border-blue-500' 
               : selectedIndex === null
@@ -496,6 +477,13 @@ export function HeadSelector({
           }`}
         >
           Reframe Settings
+          {/* Show indicator when person is selected but reframe tab is not active */}
+          {selectedIndex !== null && activeTab !== 'reframe' && (
+            <>
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-ping"></span>
+            </>
+          )}
         </button>
       </div>
 
@@ -503,30 +491,24 @@ export function HeadSelector({
       {activeTab === 'target' && (
         <>
           <div className="mb-4 text-sm text-gray-300">
-            <p>Click on a person to select them for tracking.</p>
-            <p>Selected person will be highlighted with a green border.</p>
+            {selectedIndex === null ? (
+              <>
+                <p>Click on a person to select them for tracking.</p>
+                <p>Selected person will be highlighted with a green border.</p>
+              </>
+            ) : (
+              <div className="flex items-center space-x-2 text-blue-400">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="font-medium">Great! Now click the "Reframe Settings" tab above to continue.</p>
+              </div>
+            )}
           </div>
           
           {/* Detection Settings */}
           <div className="mb-4 p-4 bg-black/20 rounded-lg border border-white/5">
             <h4 className="text-md font-semibold text-white mb-3">Detection Settings</h4>
-            
-            {/* Show/Hide Detections */}
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm text-gray-300">Show Detections</span>
-              <button
-                onClick={onToggleDetections}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  showDetections ? 'bg-blue-600' : 'bg-gray-600'
-                }`}
-              >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    showDetections ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
             
             {/* Confidence Threshold */}
             {onConfidenceChange && (
@@ -582,6 +564,18 @@ export function HeadSelector({
           onMouseLeave={handleCanvasMouseUp}
         />
         
+        {/* No person selected overlay */}
+        {activeTab === 'target' && !isDetecting && detections.length > 0 && selectedIndex === null && (
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-yellow-500/90 text-black px-4 py-2 rounded-lg flex items-center space-x-2 animate-pulse">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+              </svg>
+              <span className="font-medium">Click on a person to select them</span>
+            </div>
+          </div>
+        )}
+        
         {isDetecting && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-lg">
             <div className="text-white flex items-center space-x-2">
@@ -595,6 +589,53 @@ export function HeadSelector({
         )}
       </div>
 
+      {/* Selection Status */}
+      {activeTab === 'target' && detections.length > 0 && (
+        <div className="mb-4 p-3 rounded-lg border flex items-center justify-between"
+             style={{
+               backgroundColor: selectedIndex !== null ? 'rgba(34, 197, 94, 0.1)' : 'rgba(251, 191, 36, 0.1)',
+               borderColor: selectedIndex !== null ? 'rgba(34, 197, 94, 0.5)' : 'rgba(251, 191, 36, 0.5)'
+             }}>
+          <div className="flex items-center space-x-2">
+            {selectedIndex !== null ? (
+              <>
+                <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-sm text-green-500 font-medium">
+                  Person selected (ID: {detections[selectedIndex].trackId || selectedIndex + 1})
+                </span>
+                {activeTab === 'target' && (
+                  <span className="text-sm text-blue-400 font-medium ml-2 flex items-center">
+                    → Now go to 
+                    <span className="ml-1 px-2 py-0.5 bg-blue-500/20 rounded text-blue-300 animate-pulse">
+                      Reframe Settings
+                    </span>
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <span className="text-sm text-yellow-500 font-medium">
+                  No person selected - Click on a detection box to select
+                </span>
+              </>
+            )}
+          </div>
+          {selectedIndex !== null && (
+            <button
+              onClick={() => setSelectedIndex(null)}
+              className="text-xs text-gray-400 hover:text-white transition-colors"
+            >
+              Clear selection
+            </button>
+          )}
+        </div>
+      )}
+      
       {detections.length > 0 && (
         <div className="mb-4">
           <p className="text-sm text-gray-300">
@@ -607,41 +648,20 @@ export function HeadSelector({
       {/* Reframing Settings - Show in reframe tab */}
       {activeTab === 'reframe' && selectedIndex !== null && (
         <div className="space-y-4 p-4 bg-black/20 rounded-lg border border-white/5">
-          {/* Preset Selection */}
-          <div>
-            <label className="block text-sm font-medium text-gray-200 mb-1">Preset</label>
-            <select
-              value={currentPreset}
-              onChange={(e) => handlePresetChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 text-sm"
-            >
-              {Object.keys(REFRAMING_PRESETS).map(preset => (
-                <option key={preset} value={preset}>
-                  {preset.split('-').map(word => 
-                    word.charAt(0).toUpperCase() + word.slice(1)
-                  ).join(' ')}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* Output Ratio */}
           <div>
             <label className="block text-sm font-medium text-gray-200 mb-1">Output Ratio</label>
-            <div className="grid grid-cols-3 gap-2">
-              {['16:9', '9:16', '1:1', '4:3', '3:4'].map(ratio => (
-                <button
-                  key={ratio}
-                  onClick={() => updateReframingConfig({ outputRatio: ratio as any })}
-                  className={`px-2 py-1 rounded-md text-sm font-medium transition-colors
-                    ${reframingConfig.outputRatio === ratio 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
-                >
-                  {ratio}
-                </button>
-              ))}
-            </div>
+            <select
+              value={reframingConfig.outputRatio}
+              onChange={(e) => updateReframingConfig({ outputRatio: e.target.value as any })}
+              className="w-full px-3 py-2 border border-gray-600 rounded-md bg-gray-700 text-gray-100 text-sm"
+            >
+              <option value="9:16">9:16 - Instagram Reels, TikTok, YouTube Shorts</option>
+              <option value="16:9">16:9 - YouTube, TV, Landscape</option>
+              <option value="1:1">1:1 - Instagram Posts, Square</option>
+              <option value="4:3">4:3 - Traditional TV, iPad</option>
+              <option value="3:4">3:4 - Portrait Photos</option>
+            </select>
           </div>
 
           {/* Smoothness */}

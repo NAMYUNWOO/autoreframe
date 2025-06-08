@@ -32,7 +32,9 @@ export function HeadSelector({
   const [reframingConfig, setReframingConfig] = useState<ReframingConfig>({
     outputRatio: '9:16',
     padding: 0.3,
-    smoothness: 0.7
+    smoothness: 0.7,
+    trackingMode: 'single',
+    targetSelection: 'manual'
   });
   const [reframeBoxSize, setReframeBoxSize] = useState(1.0); // 1.0 = default size, 0.5 = smaller, 1.5 = larger
   const [reframeBoxOffset, setReframeBoxOffset] = useState({ x: 0, y: 0 }); // Offset from center

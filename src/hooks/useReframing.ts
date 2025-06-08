@@ -19,7 +19,8 @@ export function useReframing() {
     outputRatio: '9:16',
     padding: 0.3,
     smoothness: 0.7,
-    targetSelection: 'manual'
+    targetSelection: 'manual',
+    trackingMode: 'single'
   });
   const [transforms, setTransforms] = useState<Map<number, FrameTransform>>(new Map());
   const [isProcessing, setIsProcessing] = useState(false);

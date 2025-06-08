@@ -180,7 +180,7 @@ export class VideoProcessor {
         const isDetectionFrame = frameNumber % 10 === 0; // Match the sample interval
         this.onProgress({
           stage: 'analyzing',
-          progress: (frameNumber / totalFrames) * 100,
+          progress: ((frameNumber + 1) / totalFrames) * 100,
           message: isDetectionFrame 
             ? `Detecting heads in frame ${frameNumber + 1} of ${totalFrames}`
             : `Processing frame ${frameNumber + 1} of ${totalFrames}`
@@ -193,6 +193,15 @@ export class VideoProcessor {
       } catch (error) {
         // console.error(`Error processing frame ${frameNumber}:`, error);
       }
+    }
+    
+    // Ensure progress reaches 100% when complete
+    if (this.onProgress) {
+      this.onProgress({
+        stage: 'analyzing',
+        progress: 100,
+        message: `Completed processing ${totalFrames} frames`
+      });
     }
   }
 

@@ -135,7 +135,7 @@ export function TrajectoryEditor({
     // Draw nearby frame centers (after current frame)
     for (let i = 1; i <= 3; i++) {
       const nextFrame = currentFrame + i;
-      const maxFrame = Math.floor(metadata.duration * metadata.fps);
+      const maxFrame = Math.floor(metadata.duration * metadata.fps) - 1;
       if (nextFrame <= maxFrame) {
         const nextTransform = transforms.get(nextFrame);
         if (nextTransform) {
@@ -198,7 +198,7 @@ export function TrajectoryEditor({
     overlayCtx.beginPath();
 
     let firstPoint = true;
-    for (let frame = Math.max(0, currentFrame - 30); frame <= Math.min(currentFrame + 30, Math.floor(metadata.duration * metadata.fps)); frame++) {
+    for (let frame = Math.max(0, currentFrame - 30); frame <= Math.min(currentFrame + 30, Math.floor(metadata.duration * metadata.fps) - 1); frame++) {
       const t = transforms.get(frame);
       if (t) {
         if (firstPoint) {
@@ -494,12 +494,12 @@ export function TrajectoryEditor({
       {/* Timeline */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-gray-200 mb-2">
-          Frame: {currentFrame} / {Math.floor(metadata.duration * metadata.fps)}
+          Frame: {currentFrame} / {Math.floor(metadata.duration * metadata.fps) - 1}
         </label>
         <input
           type="range"
           min="0"
-          max={Math.floor(metadata.duration * metadata.fps)}
+          max={Math.floor(metadata.duration * metadata.fps) - 1}
           value={currentFrame}
           onChange={handleTimelineChange}
           className="w-full"

@@ -64,6 +64,12 @@ export function useVideoProcessor() {
     try {
       setError(null);
       await processorRef.current.processFrames(onFrame, setStatus);
+      // Set status to idle after processing completes
+      setStatus({
+        stage: 'idle',
+        progress: 100,
+        message: 'Analysis complete'
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to process frames';
       setError(message);

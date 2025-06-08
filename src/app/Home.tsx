@@ -92,7 +92,7 @@ export default function Home() {
       setShowHeadSelector(true); // Show head selector after video loads
       return metadata;
     } catch (error) {
-      console.error('Error loading video:', error);
+      // console.error('Error loading video:', error);
       if (error instanceof Error) {
         alert(`Failed to load video: ${error.message}`);
       } else {
@@ -114,7 +114,7 @@ export default function Home() {
         selectByteTrackId(selectedTrackIdForByteTrack);
       }
     } catch (error) {
-      console.error('Error during detection:', error);
+      // console.error('Error during detection:', error);
     }
   }, [processVideo, processFrames, metadata, selectedTrackIdForByteTrack, selectByteTrackId]);
 
@@ -152,11 +152,13 @@ export default function Home() {
       const a = document.createElement('a');
       a.href = url;
       const extension = options.format;
-      a.download = `reframed_${videoFile?.name || 'video'}.${extension}`;
+      // Remove extension from filename if it exists
+      const baseFilename = videoFile?.name ? videoFile.name.replace(/\.[^/.]+$/, '') : 'video';
+      a.download = `reframed_${baseFilename}.${extension}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Export failed:', error);
+      // console.error('Export failed:', error);
       alert(`Failed to export video: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, [getVideoElement, metadata, exportVideo, videoFile, transforms]);

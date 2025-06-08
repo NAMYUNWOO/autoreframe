@@ -51,12 +51,12 @@ export function useObjectDetection() {
         if (useHeadDetection) {
           headDetectorRef.current = new HeadDetector();
           await headDetectorRef.current.initialize();
-          console.log('Head detector initialized');
+          // console.log('Head detector initialized');
         }
         
         setIsModelLoaded(true);
       } catch (error) {
-        console.error('Failed to initialize detectors:', error);
+        // console.error('Failed to initialize detectors:', error);
         setIsModelLoaded(false);
       }
     };
@@ -90,7 +90,7 @@ export function useObjectDetection() {
     
     // Always use ByteTrack for consistency
     if (!byteTrackerRef.current) {
-      console.warn('ByteTracker not initialized, using default params');
+      // console.warn('ByteTracker not initialized, using default params');
       byteTrackerRef.current = new ByteTrackInterpolator({
         trackThresh: 0.3,
         trackBuffer: 30,
@@ -101,9 +101,9 @@ export function useObjectDetection() {
     }
     
     if (frameNumber === 213) {
-      console.log(`Frame 213: Before ByteTracker - ${boxes.length} boxes from YOLO`);
+      // console.log(`Frame 213: Before ByteTracker - ${boxes.length} boxes from YOLO`);
       boxes.forEach((box, i) => {
-        console.log(`  YOLO box ${i}: confidence=${box.confidence}, class=${box.class}`);
+        // console.log(`  YOLO box ${i}: confidence=${box.confidence}, class=${box.class}`);
       });
     }
     
@@ -127,7 +127,7 @@ export function useObjectDetection() {
     if (byteTrackerRef.current) {
       byteTrackerRef.current.reset();
     } else {
-      console.warn('ByteTracker not initialized before processVideo');
+      // console.warn('ByteTracker not initialized before processVideo');
     }
 
     // Extract target track ID and head center if using ByteTrack
@@ -136,7 +136,7 @@ export function useObjectDetection() {
       const targetBox = targetDetection.boxes[0];
       if (targetBox.trackId) {
         targetTrackId = targetBox.trackId;
-        console.log('Target track ID for head center propagation:', targetTrackId);
+        // console.log('Target track ID for head center propagation:', targetTrackId);
       }
     }
 
@@ -158,14 +158,14 @@ export function useObjectDetection() {
         
         if (isFirstFrame || isLastFrame || isSampleFrame) {
           if (frameNumber === 213) {
-            console.log(`Frame 213: This is a sample frame, running detection`);
+            // console.log(`Frame 213: This is a sample frame, running detection`);
           }
           const detection = await detectFrame(imageData, frameNumber, timestamp, targetTrackId);
           
           // Run head detection only on key frames: first, last, and every 5 frames
           if (useHeadDetection && headDetectorRef.current && detection.boxes.length > 0 && 
               (isFirstFrame || isLastFrame || frameNumber % 5 === 0)) {
-            console.log(`Running head detection for frame ${frameNumber} with ${detection.boxes.length} persons`);
+            // console.log(`Running head detection for frame ${frameNumber} with ${detection.boxes.length} persons`);
             
             for (const box of detection.boxes) {
               try {
@@ -178,7 +178,7 @@ export function useObjectDetection() {
                 if (headResult) {
                   box.headCenterX = headResult.x + headResult.width / 2;
                   box.headCenterY = headResult.y + headResult.height / 2;
-                  console.log(`Frame ${frameNumber}: Head detected for track ${box.trackId} at (${box.headCenterX}, ${box.headCenterY})`);
+                  // console.log(`Frame ${frameNumber}: Head detected for track ${box.trackId} at (${box.headCenterX}, ${box.headCenterY})`);
                 } else {
                   // Smart head position estimation based on aspect ratio and pose
                   const aspectRatio = box.width / box.height;
@@ -205,10 +205,10 @@ export function useObjectDetection() {
                     box.headCenterX = box.x + box.width / 2;
                     box.headCenterY = box.y + box.height * 0.25;
                   }
-                  console.log(`Frame ${frameNumber}: Head estimated (no detection) for track ${box.trackId} at (${box.headCenterX}, ${box.headCenterY}), aspect ratio: ${aspectRatio.toFixed(2)}`);
+                  // console.log(`Frame ${frameNumber}: Head estimated (no detection) for track ${box.trackId} at (${box.headCenterX}, ${box.headCenterY}), aspect ratio: ${aspectRatio.toFixed(2)})`);
                 }
               } catch (error) {
-                console.error(`Head detection failed for frame ${frameNumber}, track ${box.trackId}:`, error);
+                // console.error(`Head detection failed for frame ${frameNumber}, track ${box.trackId}:`, error);
                 // Fallback to estimation
                 const aspectRatio = box.width / box.height;
                 if (aspectRatio > 1.5) {
@@ -280,7 +280,7 @@ export function useObjectDetection() {
       // For interpolated frames, we need to interpolate head positions
       
       if (targetTrackId) {
-          console.log(`Processing ${allDetections.length} detections for head center interpolation`);
+          // console.log(`Processing ${allDetections.length} detections for head center interpolation`);
           
           // Create a map of head positions for key frames
           const headPositions = new Map<number, { x: number; y: number; relX: number; relY: number }>();
@@ -419,11 +419,11 @@ export function useObjectDetection() {
   }, [selectedTrackId, trackedObjects]);
 
   const setConfidenceThreshold = useCallback((threshold: number) => {
-    console.log(`useObjectDetection: setConfidenceThreshold called with ${threshold}`);
+    // console.log(`useObjectDetection: setConfidenceThreshold called with ${threshold}`);
     
     if (detectorRef.current) {
       detectorRef.current.setConfidenceThreshold(threshold);
-      console.log(`PersonYOLODetector threshold set to ${threshold}`);
+      // console.log(`PersonYOLODetector threshold set to ${threshold}`);
     }
     
     // Also update ByteTracker thresholds
@@ -436,7 +436,7 @@ export function useObjectDetection() {
         minBoxArea: 100,
         lowThresh: Math.max(0.1, threshold * 0.5) // Low threshold is half of main threshold
       });
-      console.log(`ByteTracker reinitialized with trackThresh=${threshold}, lowThresh=${Math.max(0.1, threshold * 0.5)}`);
+      // console.log(`ByteTracker reinitialized with trackThresh=${threshold}, lowThresh=${Math.max(0.1, threshold * 0.5)}`);
     }
   }, []);
 
@@ -451,7 +451,7 @@ export function useObjectDetection() {
         const relativeX = (box.headCenterX - box.x) / box.width;
         const relativeY = (box.headCenterY - box.y) / box.height;
         setHeadOffsetRatio({ x: relativeX, y: relativeY });
-        console.log(`Head offset ratio set: x=${relativeX}, y=${relativeY}`);
+        // console.log(`Head offset ratio set: x=${relativeX}, y=${relativeY}`);
       } else {
         // Smart default based on box aspect ratio
         // For horizontal poses (like figure skating), head is typically on one side
@@ -464,17 +464,17 @@ export function useObjectDetection() {
           // Head is usually at one end (we'll guess left for now)
           defaultX = 0.2;
           defaultY = 0.5;
-          console.log('Detected horizontal pose, adjusting head position');
+          // console.log('Detected horizontal pose, adjusting head position');
         } else if (aspectRatio < 0.5) {
           // Tall box - person likely standing
           defaultY = 0.15; // Head higher for standing poses
         }
         
         setHeadOffsetRatio({ x: defaultX, y: defaultY });
-        console.log(`Using smart default head offset ratio: x=${defaultX}, y=${defaultY} (aspect ratio: ${aspectRatio.toFixed(2)})`);
+        // console.log(`Using smart default head offset ratio: x=${defaultX}, y=${defaultY} (aspect ratio: ${aspectRatio.toFixed(2)})`);
       }
     }
-    console.log('Target detection set for tracking');
+    // console.log('Target detection set for tracking');
   }, []);
 
   const selectByteTrackId = useCallback((trackId: string) => {
@@ -484,7 +484,7 @@ export function useObjectDetection() {
         ...track,
         selected: track.id === trackId
       })));
-      console.log('Selected ByteTrack ID:', trackId);
+      // console.log('Selected ByteTrack ID:', trackId);
     }
   }, []);
 

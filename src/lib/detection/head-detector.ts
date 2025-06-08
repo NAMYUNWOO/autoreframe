@@ -18,7 +18,7 @@ export class HeadDetector {
   
   async initialize(): Promise<void> {
     try {
-      console.log('Initializing head detection model...');
+      // console.log('Initializing head detection model...');
       
       // Check if model file exists by trying to fetch it
       try {
@@ -27,7 +27,7 @@ export class HeadDetector {
           throw new Error(`Model file not found: ${this.modelPath} (${response.status})`);
         }
       } catch (fetchError) {
-        console.error('Failed to fetch model file:', fetchError);
+        // console.error('Failed to fetch model file:', fetchError);
         throw new Error(`Cannot access model file at ${this.modelPath}`);
       }
       
@@ -37,14 +37,14 @@ export class HeadDetector {
         graphOptimizationLevel: 'all'
       });
       
-      console.log('Head detection model loaded successfully');
-      console.log('Input names:', this.session.inputNames);
-      console.log('Output names:', this.session.outputNames);
+      // console.log('Head detection model loaded successfully');
+      // console.log('Input names:', this.session.inputNames);
+      // console.log('Output names:', this.session.outputNames);
       
       // Log basic info for debugging
-      console.log('Model inputs:', this.session.inputNames.length, 'outputs:', this.session.outputNames.length);
+      // console.log('Model inputs:', this.session.inputNames.length, 'outputs:', this.session.outputNames.length);
     } catch (error) {
-      console.error('Failed to load head detection model:', error);
+      // console.error('Failed to load head detection model:', error);
       throw error;
     }
   }
@@ -71,8 +71,8 @@ export class HeadDetector {
       const cropWidth = personBox.width + 2 * padX;
       const cropHeight = personBox.height + 2 * padY;
       
-      console.log(`Detecting head in person box: (${personBox.x}, ${personBox.y}, ${personBox.width}, ${personBox.height})`);
-      console.log(`Cropped region: (${cropX}, ${cropY}, ${cropWidth}, ${cropHeight})`);
+      // console.log(`Detecting head in person box: (${personBox.x}, ${personBox.y}, ${personBox.width}, ${personBox.height})`);
+      // console.log(`Cropped region: (${cropX}, ${cropY}, ${cropWidth}, ${cropHeight})`);
       
       // Create canvas for cropping
       const cropCanvas = document.createElement('canvas');
@@ -107,7 +107,7 @@ export class HeadDetector {
       const feeds: Record<string, ort.Tensor> = {};
       
       // Check input names and provide required inputs
-      console.log('Model input names:', this.session.inputNames);
+      // console.log('Model input names:', this.session.inputNames);
       
       // Main image input
       feeds[this.session.inputNames[0]] = new ort.Tensor('float32', input, [1, 3, this.inputSize, this.inputSize]);
@@ -122,9 +122,9 @@ export class HeadDetector {
       }
       
       const output = await this.session.run(feeds);
-      console.log('Model output names:', this.session.outputNames);
-      console.log('Output shapes:', Object.entries(output).map(([k, v]) => `${k}: [${v.dims}]`));
-      console.log('Output keys:', Object.keys(output));
+      // console.log('Model output names:', this.session.outputNames);
+      // console.log('Output shapes:', Object.entries(output).map(([k, v]) => `${k}: [${v.dims}]`));
+      // console.log('Output keys:', Object.keys(output));
       
       // Based on RT-DETRv2, outputs might be boxes and scores
       let boxes: ort.Tensor;
@@ -149,22 +149,22 @@ export class HeadDetector {
         scores = undefined;
       }
       
-      console.log('Boxes shape:', boxes.dims);
-      console.log('Scores shape:', scores?.dims || 'N/A');
+      // console.log('Boxes shape:', boxes.dims);
+      // console.log('Scores shape:', scores?.dims || 'N/A');
       
       // Log first few box values to understand format
       const boxData = boxes.data as Float32Array;
-      console.log('First box raw values:', Array.from(boxData).slice(0, 4));
-      console.log('Second box raw values:', Array.from(boxData).slice(4, 8));
-      console.log('Box data length:', boxData.length);
-      console.log('Score data available:', scores !== undefined);
+      // console.log('First box raw values:', Array.from(boxData).slice(0, 4));
+      // console.log('Second box raw values:', Array.from(boxData).slice(4, 8));
+      // console.log('Box data length:', boxData.length);
+      // console.log('Score data available:', scores !== undefined);
       
       // Parse detections
       const heads = this.parseDetectionsFromBoxesScores(boxes, scores, cropWidth / this.inputSize, cropHeight / this.inputSize);
       
-      console.log(`Total heads detected: ${heads.length}`);
+      // console.log(`Total heads detected: ${heads.length}`);
       heads.forEach((head, idx) => {
-        console.log(`Head ${idx}: confidence=${head.confidence.toFixed(3)}, bbox=(${head.x.toFixed(1)}, ${head.y.toFixed(1)}, ${head.width.toFixed(1)}, ${head.height.toFixed(1)})`);
+        // console.log(`Head ${idx}: confidence=${head.confidence.toFixed(3)}, bbox=(${head.x.toFixed(1)}, ${head.y.toFixed(1)}, ${head.width.toFixed(1)}, ${head.height.toFixed(1)})`);
       });
       
       if (heads.length > 0) {
@@ -182,23 +182,23 @@ export class HeadDetector {
           confidence: bestHead.confidence
         };
         
-        console.log(`Best head in crop space: (${bestHead.x}, ${bestHead.y}, ${bestHead.width}, ${bestHead.height})`);
-        console.log(`Converted to image space: (${result.x}, ${result.y}, ${result.width}, ${result.height})`);
+        // console.log(`Best head in crop space: (${bestHead.x}, ${bestHead.y}, ${bestHead.width}, ${bestHead.height})`);
+        // console.log(`Converted to image space: (${result.x}, ${result.y}, ${result.width}, ${result.height})`);
         
         // Verify head is in reasonable position (top 40% of person box for standing, varies for other poses)
         const headCenterY = result.y + result.height / 2;
         const personCenterY = personBox.y + personBox.height / 2;
         const relativeY = (headCenterY - personBox.y) / personBox.height;
         
-        console.log(`Head position check: relativeY=${relativeY.toFixed(2)} (0=top, 1=bottom of person box)`);
+        // console.log(`Head position check: relativeY=${relativeY.toFixed(2)} (0=top, 1=bottom of person box)`);
         
         return result;
       }
       
-      console.log('No heads detected by model');
+      // console.log('No heads detected by model');
       return null;
     } catch (error) {
-      console.error('Head detection failed:', error);
+      // console.error('Head detection failed:', error);
       return null;
     }
   }
@@ -273,7 +273,7 @@ export class HeadDetector {
       // Parse detections
       return this.parseDetectionsFromBoxesScores(boxes, scores, scaleX, scaleY);
     } catch (error) {
-      console.error('Head detection failed:', error);
+      // console.error('Head detection failed:', error);
       return [];
     }
   }
@@ -299,17 +299,17 @@ export class HeadDetector {
     const scoreData = scores?.data as Float32Array;
     const detections: HeadDetection[] = [];
     
-    console.log('Parsing detections - boxes dims:', boxes.dims, 'scores dims:', scores?.dims);
+    // console.log('Parsing detections - boxes dims:', boxes.dims, 'scores dims:', scores?.dims);
     
     // RT-DETRv2 output format: boxes shape is typically [batch, num_queries, 4]
     // where 4 values are [cx, cy, w, h] in normalized coordinates
     const numBoxes = boxes.dims[1] || (boxData.length / 4);
-    console.log(`Number of boxes to process: ${numBoxes}`);
+    // console.log(`Number of boxes to process: ${numBoxes}`);
     
     // Log first few boxes to understand format
     for (let i = 0; i < Math.min(5, numBoxes); i++) {
       const boxIdx = i * 4;
-      console.log(`Box ${i} raw data: [${boxData[boxIdx]}, ${boxData[boxIdx+1]}, ${boxData[boxIdx+2]}, ${boxData[boxIdx+3]}]`);
+      // console.log(`Box ${i} raw data: [${boxData[boxIdx]}, ${boxData[boxIdx+1]}, ${boxData[boxIdx+2]}, ${boxData[boxIdx+3]}]`);
     }
     
     for (let i = 0; i < numBoxes; i++) {
@@ -332,7 +332,7 @@ export class HeadDetector {
             }
           }
           confidence = maxScore;
-          if (i < 5) console.log(`Box ${i}: max score=${maxScore.toFixed(3)} for class=${maxClass}`);
+          if (i < 5) {} // console.log(`Box ${i}: max score=${maxScore.toFixed(3)} for class=${maxClass}`);
         } else {
           confidence = scoreData[i];
         }
@@ -345,7 +345,7 @@ export class HeadDetector {
         const rawW = boxData[boxIdx + 2];
         const rawH = boxData[boxIdx + 3];
         
-        console.log(`Head detection ${i}: raw values cx=${rawCx.toFixed(3)}, cy=${rawCy.toFixed(3)}, w=${rawW.toFixed(3)}, h=${rawH.toFixed(3)}, conf=${confidence.toFixed(3)}`);
+        // console.log(`Head detection ${i}: raw values cx=${rawCx.toFixed(3)}, cy=${rawCy.toFixed(3)}, w=${rawW.toFixed(3)}, h=${rawH.toFixed(3)}, conf=${confidence.toFixed(3)}`);
         
         // Check if coordinates are already in pixel space or normalized [0, 1]
         let cx, cy, w, h;
@@ -363,7 +363,7 @@ export class HeadDetector {
           w = x2 - x1;
           h = y2 - y1;
           
-          console.log(`YOLO format detected (x1,y1,x2,y2): (${x1}, ${y1}, ${x2}, ${y2}) -> cx=${cx}, cy=${cy}, w=${w}, h=${h}`);
+          // console.log(`YOLO format detected (x1,y1,x2,y2): (${x1}, ${y1}, ${x2}, ${y2}) -> cx=${cx}, cy=${cy}, w=${w}, h=${h}`);
           
           // Scale based on whether normalized or pixel coords
           if (x2 <= 1.0) {
@@ -385,14 +385,14 @@ export class HeadDetector {
           cy = rawCy * this.inputSize * scaleY;
           w = rawW * this.inputSize * scaleX;
           h = rawH * this.inputSize * scaleY;
-          console.log(`Normalized coords detected, scaled to: cx=${cx}, cy=${cy}, w=${w}, h=${h}`);
+          // console.log(`Normalized coords detected, scaled to: cx=${cx}, cy=${cy}, w=${w}, h=${h}`);
         } else {
           // Already in pixel coordinates for input size
           cx = rawCx * scaleX;
           cy = rawCy * scaleY;
           w = rawW * scaleX;
           h = rawH * scaleY;
-          console.log(`Pixel coords detected, scaled to: cx=${cx}, cy=${cy}, w=${w}, h=${h}`);
+          // console.log(`Pixel coords detected, scaled to: cx=${cx}, cy=${cy}, w=${w}, h=${h}`);
         }
         
         detections.push({

@@ -52,12 +52,12 @@ export class StableFrameCalculator {
         // Use detected head center
         headCenterX = target.headCenterX;
         headCenterY = target.headCenterY;
-        console.log(`Frame ${this.boxHistory.length}: Using detected head center: (${headCenterX.toFixed(2)}, ${headCenterY.toFixed(2)}) for box at (${target.x.toFixed(2)}, ${target.y.toFixed(2)})`);
+        // console.log(`Frame ${this.boxHistory.length}: Using detected head center: (${headCenterX.toFixed(2)}, ${headCenterY.toFixed(2)}) for box at (${target.x.toFixed(2)}, ${target.y.toFixed(2)})`);
       } else {
         // Fallback: estimate head position
         headCenterX = geometricCenterX;
         headCenterY = target.y + target.height * 0.3; // 30% from top
-        console.log(`Frame ${this.boxHistory.length}: No head center detected, estimating: (${headCenterX.toFixed(2)}, ${headCenterY.toFixed(2)})`);
+        // console.log(`Frame ${this.boxHistory.length}: No head center detected, estimating: (${headCenterX.toFixed(2)}, ${headCenterY.toFixed(2)})`);
       }
       
       // Store history

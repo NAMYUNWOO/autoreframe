@@ -70,7 +70,7 @@ export class SimpleExporter {
       
       const renderFrame = () => {
         if (exportVideo.paused || exportVideo.ended) {
-          console.log('Video ended, stopping recorder. Frames processed:', frameCount);
+          // console.log('Video ended, stopping recorder. Frames processed:', frameCount);
           // Ensure we've processed all frames
           if (onProgress) {
             onProgress(100);
@@ -112,7 +112,7 @@ export class SimpleExporter {
           
           // Log for first few frames to verify consistency
           if (currentFrame <= 5) {
-            console.log(`Export frame ${currentFrame}: Using calculated dimensions ${actualCropW.toFixed(0)}x${actualCropH.toFixed(0)}`);
+            // console.log(`Export frame ${currentFrame}: Using calculated dimensions ${actualCropW.toFixed(0)}x${actualCropH.toFixed(0)}`);
           }
         } else {
           // Fallback to scale-based calculation
@@ -133,19 +133,19 @@ export class SimpleExporter {
             }
           }
           
-          console.warn('Export: No initial target box provided, using scale-based calculation');
+          // console.warn('Export: No initial target box provided, using scale-based calculation');
         }
         
         // Debug log for first few frames
         if (currentFrame <= 5 || (currentFrame >= 299 && currentFrame <= 300)) {
-          console.log(`Export Frame ${currentFrame}:`);
-          console.log(`  Output: ${width}x${height} (aspect: ${outputAspectRatio.toFixed(2)})`);
-          console.log(`  Transform: x=${transform.x}, y=${transform.y}, scale=${transform.scale}`);
-          console.log(`  Crop dimensions: ${actualCropW.toFixed(0)}x${actualCropH.toFixed(0)}`);
+          // console.log(`Export Frame ${currentFrame}:`);
+          // console.log(`  Output: ${width}x${height} (aspect: ${outputAspectRatio.toFixed(2)})`);
+          // console.log(`  Transform: x=${transform.x}, y=${transform.y}, scale=${transform.scale}`);
+          // console.log(`  Crop dimensions: ${actualCropW.toFixed(0)}x${actualCropH.toFixed(0)}`);
           if (initialTargetBox && reframingConfig) {
-            console.log(`  Using ReframeSizeCalculator with initial box: ${initialTargetBox.width}x${initialTargetBox.height}`);
+            // console.log(`  Using ReframeSizeCalculator with initial box: ${initialTargetBox.width}x${initialTargetBox.height}`);
           } else {
-            console.log(`  Using scale-based calculation (fallback)`);
+            // console.log(`  Using scale-based calculation (fallback)`);
           }
         }
         
@@ -161,7 +161,7 @@ export class SimpleExporter {
             0, 0, width, height
           );
         } catch (error) {
-          console.error('Error drawing frame:', error);
+          // console.error('Error drawing frame:', error);
         }
 
         frameCount++;

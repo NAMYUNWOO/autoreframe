@@ -18,7 +18,7 @@ export class FFmpegExporter {
     // Use local files for faster loading
     const baseURL = '/ffmpeg';
     this.ffmpeg.on('log', ({ message }) => {
-      console.log('[FFmpeg]', message);
+      // console.log('[FFmpeg]', message);
     });
 
     try {
@@ -28,7 +28,7 @@ export class FFmpegExporter {
         wasmURL: `${baseURL}/ffmpeg-core.wasm`,
       });
     } catch (error) {
-      console.warn('Failed to load FFmpeg from local files, falling back to CDN');
+      // console.warn('Failed to load FFmpeg from local files, falling back to CDN');
       // Fallback to CDN if local files fail
       const cdnURL = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
       await this.ffmpeg.load({
@@ -114,7 +114,7 @@ export class FFmpegExporter {
     });
 
     // Log info for debugging
-    console.log(`Converting WebM to ${options.format}, Target FPS: ${metadata.fps}, Duration: ${metadata.duration}s`);
+    // console.log(`Converting WebM to ${options.format}, Target FPS: ${metadata.fps}, Duration: ${metadata.duration}s`);
     
     // FFmpeg command with explicit duration and frame rate handling
     const ffmpegArgs = [

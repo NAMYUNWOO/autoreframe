@@ -8,7 +8,7 @@ export class PersonYOLODetector {
   private confidenceThreshold: number = 0.3; // 30% default confidence threshold for better detection
   
   constructor() {
-    console.log('PersonYOLODetector constructor: initial threshold', this.confidenceThreshold);
+    // console.log('PersonYOLODetector constructor: initial threshold', this.confidenceThreshold);
   }
   private iouThreshold: number = 0.45;
   private maxDetections: number = 100;
@@ -31,18 +31,18 @@ export class PersonYOLODetector {
   async initialize(): Promise<void> {
     try {
       await tf.ready();
-      console.log('Loading YOLOv8n model from:', this.modelPath);
+      // console.log('Loading YOLOv8n model from:', this.modelPath);
       this.model = await tf.loadGraphModel(this.modelPath);
-      console.log('YOLOv8n person detection model initialized successfully');
+      // console.log('YOLOv8n person detection model initialized successfully');
       
       // Test the model with a dummy input to ensure it's working
       const testInput = tf.zeros([1, this.inputSize, this.inputSize, 3]);
       const testOutput = await this.model.predict(testInput) as tf.Tensor;
-      console.log('Model test output shape:', testOutput.shape);
+      // console.log('Model test output shape:', testOutput.shape);
       testInput.dispose();
       testOutput.dispose();
     } catch (error) {
-      console.error('Failed to initialize YOLOv8n model:', error);
+      // console.error('Failed to initialize YOLOv8n model:', error);
       throw error;
     }
   }
@@ -96,7 +96,7 @@ export class PersonYOLODetector {
     
     const isFrame213 = frameNumber === 213;
     if (isFrame213) {
-      console.log('Frame 213: YOLOv8 predictions shape:', predictions.shape);
+      // console.log('Frame 213: YOLOv8 predictions shape:', predictions.shape);
     }
     
     // YOLOv8 outputs can be in different formats
@@ -109,7 +109,7 @@ export class PersonYOLODetector {
     if (predictions.shape[1] === 84 && predictions.shape[2] === 8400) {
       // Format: [1, 84, 8400] - need to transpose
       if (isFrame213) {
-        console.log('Frame 213: Transposing YOLOv8 output from [1, 84, 8400] to [1, 8400, 84]');
+        // console.log('Frame 213: Transposing YOLOv8 output from [1, 84, 8400] to [1, 8400, 84]');
       }
       const transposed = predictions.transpose([0, 2, 1]);
       data = await transposed.data() as Float32Array;
@@ -125,7 +125,7 @@ export class PersonYOLODetector {
     }
     
     if (isFrame213) {
-      console.log(`Frame 213: Processing ${numBoxes} boxes with stride ${stride}`);
+      // console.log(`Frame 213: Processing ${numBoxes} boxes with stride ${stride}`);
     }
     
     const boxes: BoundingBox[] = [];
@@ -165,7 +165,7 @@ export class PersonYOLODetector {
       // Only keep person detections (class 0) with confidence
       // Debug: Log ALL person detections regardless of threshold
       if (maxClassIdx === 0 && isFrame213) {
-        console.log(`Frame 213 - Person detection: score=${maxScore.toFixed(3)}, threshold=${this.confidenceThreshold}, passes=${maxScore > this.confidenceThreshold}`);
+        // console.log(`Frame 213 - Person detection: score=${maxScore.toFixed(3)}, threshold=${this.confidenceThreshold}, passes=${maxScore > this.confidenceThreshold}`);
       }
       
       // Check if score seems to be in percentage form (0-100) rather than decimal (0-1)
@@ -194,15 +194,15 @@ export class PersonYOLODetector {
     }
     
     if (isFrame213) {
-      console.log(`Frame 213: Found ${boxes.length} person detections before NMS`);
-      console.log(`Frame 213: Max score seen: ${debugMaxScore.toFixed(3)}, boxes with score > 0.01: ${debugScoreCount}`);
-      console.log(`Frame 213: Current confidence threshold: ${this.confidenceThreshold}`);
+      // console.log(`Frame 213: Found ${boxes.length} person detections before NMS`);
+      // console.log(`Frame 213: Max score seen: ${debugMaxScore.toFixed(3)}, boxes with score > 0.01: ${debugScoreCount}`);
+      // console.log(`Frame 213: Current confidence threshold: ${this.confidenceThreshold}`);
     }
     
     // Apply NMS
     const nmsBoxes = this.nonMaxSuppression(boxes);
     if (isFrame213) {
-      console.log(`Frame 213: ${nmsBoxes.length} person detections after NMS`);
+      // console.log(`Frame 213: ${nmsBoxes.length} person detections after NMS`);
     }
     
     return nmsBoxes;
@@ -254,7 +254,7 @@ export class PersonYOLODetector {
   }
 
   setConfidenceThreshold(threshold: number): void {
-    console.log(`PersonYOLODetector: Setting confidence threshold to ${threshold}`);
+    // console.log(`PersonYOLODetector: Setting confidence threshold to ${threshold}`);
     this.confidenceThreshold = threshold;
   }
 

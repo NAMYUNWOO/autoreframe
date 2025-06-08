@@ -63,7 +63,7 @@ export function DetectionOverlay({
           value={confidenceThreshold * 100}
           onChange={(e) => {
             const value = parseFloat(e.target.value) / 100;
-            console.log(`DetectionOverlay: Slider changed to ${e.target.value}% (${value})`);
+            // console.log(`DetectionOverlay: Slider changed to ${e.target.value}% (${value})`);
             onConfidenceChange(value);
           }}
           className="w-full"

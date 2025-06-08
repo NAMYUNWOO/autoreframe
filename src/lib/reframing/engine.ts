@@ -52,7 +52,7 @@ export class ReframingEngine {
       
       if (matchingDetection) {
         targets = [matchingDetection];
-        console.log(`Frame ${frameNumber}: Found matching detection for track ${selectedTrack.id}, head center: ${matchingDetection.headCenterX}, ${matchingDetection.headCenterY}`);
+        // console.log(`Frame ${frameNumber}: Found matching detection for track ${selectedTrack.id}, head center: ${matchingDetection.headCenterX}, ${matchingDetection.headCenterY}`);
       } else {
         // Find the selected track in any detection
         const selectedBox = detections.find(det => det.trackId === selectedTrack.id);
@@ -155,11 +155,11 @@ export class ReframingEngine {
     const maxFrame = Math.max(...detections.map(d => d.frameNumber));
     
     // Process every frame since ByteTrack provides interpolated data
-    console.log(`ReframingEngine: Processing ${maxFrame + 1} frames with ByteTrack interpolated data`);
+    // console.log(`ReframingEngine: Processing ${maxFrame + 1} frames with ByteTrack interpolated data`);
     
     // If using Bezier smoothing and we have a selected track
     if (this.useBezierSmoothing && selectedTrack) {
-      console.log('Using Bezier curve smoothing for stable reframing');
+      // console.log('Using Bezier curve smoothing for stable reframing');
       
       // Get smoothed trajectory for the entire sequence
       const outputRatio = ASPECT_RATIOS[this.config.outputRatio];
@@ -173,12 +173,12 @@ export class ReframingEngine {
           const targetBox = detection.boxes.find(box => box.trackId === selectedTrack.id);
           if (targetBox) {
             initialTargetBox = { width: targetBox.width, height: targetBox.height };
-            console.log(`ReframingEngine: Found initial target dimensions: ${targetBox.width}x${targetBox.height} from frame ${detection.frameNumber}`);
+            // console.log(`ReframingEngine: Found initial target dimensions: ${targetBox.width}x${targetBox.height} from frame ${detection.frameNumber}`);
             break;
           }
         }
       } else {
-        console.log(`ReframingEngine: Using provided initial target dimensions: ${initialTargetBox.width}x${initialTargetBox.height}`);
+        // console.log(`ReframingEngine: Using provided initial target dimensions: ${initialTargetBox.width}x${initialTargetBox.height}`);
       }
       
       const smoothedTransforms = this.bezierTrajectorySmoother.smoothTrajectory(

@@ -71,26 +71,26 @@ export function HeadSelector({
 
     // Draw first frame
     ctx.drawImage(videoElement, 0, 0);
-    console.log('Canvas size:', canvas.width, 'x', canvas.height);
+    // console.log('Canvas size:', canvas.width, 'x', canvas.height);
 
     // Import and run detection
     try {
-      console.log('Importing PersonYOLODetector...');
+      // console.log('Importing PersonYOLODetector...');
       const { PersonYOLODetector } = await import('@/lib/detection/person-yolo');
       const detector = new PersonYOLODetector();
       
-      console.log('Initializing detector...');
+      // console.log('Initializing detector...');
       await detector.initialize();
       
       // Set a lower threshold for initial detection to ensure we catch all persons
       detector.setConfidenceThreshold(0.3);
       
-      console.log('Running detection on first frame...');
+      // console.log('Running detection on first frame...');
       const personDetections = await detector.detect(canvas);
-      console.log('Raw detections found:', personDetections.length);
+      // console.log('Raw detections found:', personDetections.length);
       
       // Always use ByteTracker for consistency
-      console.log('Applying ByteTracker...');
+      // console.log('Applying ByteTracker...');
       const { ByteTracker } = await import('@/lib/detection/bytetrack-proper/byte-tracker');
       const byteTracker = new ByteTracker({
         trackThresh: confidenceThreshold,
@@ -99,23 +99,23 @@ export function HeadSelector({
         minBoxArea: 100,
         lowThresh: Math.max(0.1, confidenceThreshold * 0.5)
       });
-      console.log('HeadSelector: ByteTracker using threshold', confidenceThreshold);
+      // console.log('HeadSelector: ByteTracker using threshold', confidenceThreshold);
       
       // Process first frame with ByteTracker
       const finalDetections = byteTracker.update(personDetections);
-      console.log('ByteTracker detections:', finalDetections.length);
+      // console.log('ByteTracker detections:', finalDetections.length);
         
         // Try to detect heads for each person
         const useHeadDetection = false; // Disable head detection - model not reliable
         
         if (useHeadDetection) {
           try {
-            console.log('Initializing head detector...');
+            // console.log('Initializing head detector...');
             const { HeadDetector } = await import('@/lib/detection/head-detector');
             const headDetector = new HeadDetector();
             await headDetector.initialize();
             
-            console.log('Detecting heads in tracked persons...');
+            // console.log('Detecting heads in tracked persons...');
             for (const detection of finalDetections) {
               const headResult = await headDetector.detectHeadInBox(
                 canvas,
@@ -127,17 +127,17 @@ export function HeadSelector({
                 // Add head center to detection
                 detection.headCenterX = headResult.x + headResult.width / 2;
                 detection.headCenterY = headResult.y + headResult.height / 2;
-                console.log(`Head detected for track ${detection.trackId}:`);
-                console.log(`  Person box: (${detection.x}, ${detection.y}, ${detection.width}, ${detection.height})`);
-                console.log(`  Head box: (${headResult.x}, ${headResult.y}, ${headResult.width}, ${headResult.height})`);
-                console.log(`  Head center: (${detection.headCenterX}, ${detection.headCenterY})`);
+                // console.log(`Head detected for track ${detection.trackId}:`);
+                // console.log(`  Person box: (${detection.x}, ${detection.y}, ${detection.width}, ${detection.height})`);
+                // console.log(`  Head box: (${headResult.x}, ${headResult.y}, ${headResult.width}, ${headResult.height})`);
+                // console.log(`  Head center: (${detection.headCenterX}, ${detection.headCenterY})`);
                 
                 // Verify head is within person box
                 if (detection.headCenterX < detection.x || 
                     detection.headCenterX > detection.x + detection.width ||
                     detection.headCenterY < detection.y || 
                     detection.headCenterY > detection.y + detection.height) {
-                  console.warn(`WARNING: Head center is outside person box!`);
+                  // console.warn(`WARNING: Head center is outside person box!`);
                 }
               } else {
                 // Smart head position estimation based on box aspect ratio
@@ -148,19 +148,19 @@ export function HeadSelector({
                   // For figure skating, head is typically at the left side when horizontal
                   detection.headCenterX = detection.x + detection.width * 0.15; // Head at left end
                   detection.headCenterY = detection.y + detection.height * 0.5;
-                  console.log(`Head estimated for horizontal pose (figure skating), track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
+                  // console.log(`Head estimated for horizontal pose (figure skating), track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
                 } else {
                   // Normal standing pose
                   detection.headCenterX = detection.x + detection.width / 2;
                   detection.headCenterY = detection.y + detection.height * 0.25;
-                  console.log(`Head estimated for track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
+                  // console.log(`Head estimated for track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
                 }
               }
             }
             
             headDetector.dispose();
           } catch (headError) {
-            console.warn('Head detection failed, using estimates:', headError);
+            // console.warn('Head detection failed, using estimates:', headError);
             // Use estimated head positions
             for (const detection of finalDetections) {
               const aspectRatio = detection.width / detection.height;
@@ -175,17 +175,17 @@ export function HeadSelector({
           }
         } else {
           // Use estimated head positions when head detection is disabled
-          console.log('Using estimated head positions (head detection disabled)');
+          // console.log('Using estimated head positions (head detection disabled)');
           for (const detection of finalDetections) {
             const aspectRatio = detection.width / detection.height;
             if (aspectRatio > 1.5) {
               detection.headCenterX = detection.x + detection.width * 0.15;
               detection.headCenterY = detection.y + detection.height * 0.5;
-              console.log(`Head estimated for horizontal pose, track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
+              // console.log(`Head estimated for horizontal pose, track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
             } else {
               detection.headCenterX = detection.x + detection.width / 2;
               detection.headCenterY = detection.y + detection.height * 0.25;
-              console.log(`Head estimated for track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
+              // console.log(`Head estimated for track ${detection.trackId} at (${detection.headCenterX}, ${detection.headCenterY})`);
             }
           }
         }
@@ -197,10 +197,10 @@ export function HeadSelector({
       if (finalDetections.length > 0) {
         drawDetections(overlayCtx, finalDetections, null);
       } else {
-        console.warn('No persons detected in the first frame');
+        // console.warn('No persons detected in the first frame');
       }
     } catch (error) {
-      console.error('Failed to detect persons:', error);
+      // console.error('Failed to detect persons:', error);
       if (error instanceof Error) {
         alert(`Failed to detect persons: ${error.message}`);
       } else {

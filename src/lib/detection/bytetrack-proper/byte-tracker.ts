@@ -19,7 +19,7 @@ export class ByteTracker {
       lowThresh: params.lowThresh || 0.1
     };
     
-    console.log('ByteTracker initialized with params:', this.params);
+    // console.log('ByteTracker initialized with params:', this.params);
     
     STrack.resetId();
   }
@@ -31,10 +31,10 @@ export class ByteTracker {
     this.frameId++;
     
     if (frameNumber && frameNumber >= 210 && frameNumber <= 214) {
-      console.log(`Frame ${frameNumber}: ByteTracker.update - frameId=${this.frameId}, input boxes: ${boxes.length}`);
+      // console.log(`Frame ${frameNumber}: ByteTracker.update - frameId=${this.frameId}, input boxes: ${boxes.length}`);
       if (frameNumber === 213) {
         boxes.forEach((box, i) => {
-          console.log(`  Frame 213 - Input box ${i}: confidence=${box.confidence.toFixed(3)}, class=${box.class}`);
+          // console.log(`  Frame 213 - Input box ${i}: confidence=${box.confidence.toFixed(3)}, class=${box.class}`);
         });
       }
     }
@@ -59,7 +59,7 @@ export class ByteTracker {
     // For debugging: log actual scores
     if (frameNumber === 213 && validDetections.length > 0) {
       const scores = validDetections.map(d => d.score.toFixed(3)).join(', ');
-      console.log(`Frame 213: ByteTracker scores=[${scores}], trackThresh=${this.params.trackThresh}, lowThresh=${this.params.lowThresh}`);
+      // console.log(`Frame 213: ByteTracker scores=[${scores}], trackThresh=${this.params.trackThresh}, lowThresh=${this.params.lowThresh}`);
     }
     
     const highDetections = validDetections.filter(det => det.score >= this.params.trackThresh);
@@ -68,7 +68,7 @@ export class ByteTracker {
     );
     
     if (frameNumber === 213) {
-      console.log(`Frame 213: Valid detections: ${validDetections.length}, high: ${highDetections.length}, low: ${lowDetections.length}`);
+      // console.log(`Frame 213: Valid detections: ${validDetections.length}, high: ${highDetections.length}, low: ${lowDetections.length}`);
     }
     
     // Initialize new tracks for first frame
@@ -83,8 +83,8 @@ export class ByteTracker {
     }
     
     if (frameNumber === 213) {
-      console.log(`Frame 213: ByteTracker frameId=${this.frameId}, not first frame, continuing...`);
-      console.log(`Frame 213: Current tracked: ${this.trackedStracks.length}, lost: ${this.lostStracks.length}`);
+      // console.log(`Frame 213: ByteTracker frameId=${this.frameId}, not first frame, continuing...`);
+      // console.log(`Frame 213: Current tracked: ${this.trackedStracks.length}, lost: ${this.lostStracks.length}`);
     }
     
     // Predict current tracks
@@ -111,7 +111,7 @@ export class ByteTracker {
     }
     
     if (frameNumber === 213) {
-      console.log(`Frame 213: Step 1 - trackedStracks: ${trackedStracks.length}, unconfirmedStracks: ${unconfirmedStracks.length}`);
+      // console.log(`Frame 213: Step 1 - trackedStracks: ${trackedStracks.length}, unconfirmedStracks: ${unconfirmedStracks.length}`);
     }
     
     // Associate confirmed tracks with high detections
@@ -132,7 +132,7 @@ export class ByteTracker {
     const remainDetIdx = uDetIdx;
     
     if (frameNumber === 213) {
-      console.log(`Frame 213: After Step 1 - unmatched tracks: ${remainTrackIdx.length}, unmatched detections: ${remainDetIdx.length}`);
+      // console.log(`Frame 213: After Step 1 - unmatched tracks: ${remainTrackIdx.length}, unmatched detections: ${remainDetIdx.length}`);
     }
     
     // Mark unmatched tracks
@@ -172,7 +172,7 @@ export class ByteTracker {
     const remainingHighDets = remainDetIdx.map(i => highDetections[i]);
     
     if (frameNumber === 213) {
-      console.log(`Frame 213: Step 3 - remaining high detections: ${remainingHighDets.length}, unconfirmed tracks: ${unconfirmedStracks.length}`);
+      // console.log(`Frame 213: Step 3 - remaining high detections: ${remainingHighDets.length}, unconfirmed tracks: ${unconfirmedStracks.length}`);
     }
     
     const dists3 = iouDistance(unconfirmedStracks, remainingHighDets);
@@ -197,13 +197,13 @@ export class ByteTracker {
     const newDetections = newDetIdx.map(i => highDetections[i]);
     
     if (frameNumber === 213) {
-      console.log(`Frame 213: Step 4 - New detections to track: ${newDetections.length}`);
+      // console.log(`Frame 213: Step 4 - New detections to track: ${newDetections.length}`);
     }
     
     for (const det of newDetections) {
       const track = STrack.fromDetection(det, this.frameId);
       if (frameNumber === 213) {
-        console.log(`Frame 213: Creating new track, isActivated=${track.isActivated}`);
+        // console.log(`Frame 213: Creating new track, isActivated=${track.isActivated}`);
       }
       if (!track.isActivated) {
         activatedStracks.push(track);
@@ -250,14 +250,14 @@ export class ByteTracker {
     const outputStracks = this.trackedStracks.filter(track => track.isActivated);
     
     if (frameNumber === 213) {
-      console.log(`Frame 213: ByteTracker output - detections: ${boxes.length}, tracked: ${outputStracks.length}, lost: ${this.lostStracks.length}`);
+      // console.log(`Frame 213: ByteTracker output - detections: ${boxes.length}, tracked: ${outputStracks.length}, lost: ${this.lostStracks.length}`);
     }
     
     const output = this.convertToOutput(outputStracks);
     
     if (frameNumber === 213) {
       output.forEach((box, i) => {
-        console.log(`  Frame 213 - Output box ${i}: trackId=${box.trackId}, confidence=${box.confidence.toFixed(3)}`);
+        // console.log(`  Frame 213 - Output box ${i}: trackId=${box.trackId}, confidence=${box.confidence.toFixed(3)}`);
       });
     }
     

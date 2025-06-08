@@ -104,9 +104,9 @@ export class ReframeSizeCalculator {
       adjustedHeight = finalWidth / outputRatio;
     }
     
-    console.log(`ReframeSizeCalculator: Target ${targetBox.width}x${targetBox.height} (${(targetRatio * 100).toFixed(1)}% of frame)`);
-    console.log(`  Padding multiplier: ${paddingMultiplier}x`);
-    console.log(`  Final reframe: ${adjustedWidth.toFixed(0)}x${adjustedHeight.toFixed(0)}, scale: ${clampedScale.toFixed(2)}`);
+    // console.log(`ReframeSizeCalculator: Target ${targetBox.width}x${targetBox.height} (${(targetRatio * 100).toFixed(1)}% of frame)`);
+    // console.log(`  Padding multiplier: ${paddingMultiplier}x`);
+    // console.log(`  Final reframe: ${adjustedWidth.toFixed(0)}x${adjustedHeight.toFixed(0)}, scale: ${clampedScale.toFixed(2)}`);
     
     return {
       width: adjustedWidth,
@@ -165,7 +165,7 @@ export class ReframeSizeCalculator {
     const reframeWidth = frameWidth / clampedScale;
     const reframeHeight = reframeWidth / outputRatio;
     
-    console.log(`Head-based reframe: Head ${headWidth}x${headHeight} -> Reframe ${reframeWidth.toFixed(0)}x${reframeHeight.toFixed(0)}, scale: ${clampedScale.toFixed(2)}`);
+    // console.log(`Head-based reframe: Head ${headWidth}x${headHeight} -> Reframe ${reframeWidth.toFixed(0)}x${reframeHeight.toFixed(0)}, scale: ${clampedScale.toFixed(2)}`);
     
     return {
       width: reframeWidth,

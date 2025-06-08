@@ -17,7 +17,7 @@ export class FFmpegSequenceExporter {
 
     const baseURL = '/ffmpeg';
     this.ffmpeg.on('log', ({ message }) => {
-      console.log('[FFmpeg]', message);
+      // console.log('[FFmpeg]', message);
     });
 
     try {
@@ -26,7 +26,7 @@ export class FFmpegSequenceExporter {
         wasmURL: `${baseURL}/ffmpeg-core.wasm`,
       });
     } catch (error) {
-      console.warn('Failed to load FFmpeg from local files, falling back to CDN');
+      // console.warn('Failed to load FFmpeg from local files, falling back to CDN');
       const cdnURL = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
       await this.ffmpeg.load({
         coreURL: await toBlobURL(`${cdnURL}/ffmpeg-core.js`, 'text/javascript'),
@@ -54,6 +54,8 @@ export class FFmpegSequenceExporter {
       metadata.height,
       outputRatio as any
     );
+    
+    let inputFile: string;
 
     // Create canvas for frame extraction
     const canvas = document.createElement('canvas');
@@ -73,8 +75,25 @@ export class FFmpegSequenceExporter {
       exportVideo.onloadeddata = () => resolve();
     });
 
+    // First, write the original video to FFmpeg for audio extraction
+    // console.log('Fetching video from:', videoElement.src);
+    const videoBlob = await fetch(videoElement.src).then(r => r.blob());
+    // console.log('Video blob size:', videoBlob.size, 'type:', videoBlob.type);
+    const videoData = await fetchFile(videoBlob);
+    // console.log('Video data size:', videoData.byteLength);
+    
+    // Use appropriate extension based on MIME type
+    const inputExt = videoBlob.type.includes('mp4') ? 'mp4' : 
+                     videoBlob.type.includes('webm') ? 'webm' : 
+                     videoBlob.type.includes('quicktime') ? 'mov' : 'mp4';
+    inputFile = `original.${inputExt}`;
+    
+    await this.ffmpeg.writeFile(inputFile, videoData);
+    // console.log('Wrote input file:', inputFile);
+
     // Extract frames as images
     const totalFrames = Math.floor(metadata.duration * metadata.fps);
+    // console.log(`Extracting ${totalFrames} frames at ${metadata.fps} fps`);
     
     for (let frame = 0; frame < totalFrames; frame++) {
       const time = frame / metadata.fps;
@@ -100,13 +119,23 @@ export class FFmpegSequenceExporter {
           }
 
           // Convert canvas to image and write to FFmpeg
-          const blob = await new Promise<Blob>((resolve) => {
-            canvas.toBlob((blob) => resolve(blob!), 'image/jpeg', 0.95);
+          const blob = await new Promise<Blob>((resolve, reject) => {
+            canvas.toBlob((blob) => {
+              if (blob) {
+                resolve(blob);
+              } else {
+                reject(new Error('Failed to create blob from canvas'));
+              }
+            }, 'image/jpeg', 0.95);
           });
           
           const imageData = await fetchFile(blob);
           const filename = `frame_${String(frame).padStart(5, '0')}.jpg`;
           await this.ffmpeg.writeFile(filename, imageData);
+          
+          // if (frame === 0) {
+          //   console.log(`First frame saved: ${filename}, size: ${imageData.byteLength}`);
+          // }
 
           if (onProgress) {
             onProgress((frame / totalFrames) * 80); // 80% for frame extraction
@@ -127,15 +156,20 @@ export class FFmpegSequenceExporter {
     const outputFile = options.format === 'mov' ? 'output.mov' : 'output.mp4';
     const mimeType = options.format === 'mov' ? 'video/quicktime' : 'video/mp4';
 
-    // Create video from image sequence
+    // Create video from image sequence with audio from original
     const ffmpegArgs = [
       '-framerate', `${metadata.fps}`,
       '-i', 'frame_%05d.jpg',
+      '-i', inputFile,
+      '-map', '0:v',  // Use video from image sequence
+      '-map', '1:a?', // Use audio from original (if exists)
       '-c:v', 'libx264',
       '-preset', 'medium',
       '-crf', '15',
       '-pix_fmt', 'yuv420p',
       '-b:v', `${options.bitrate || 12000000}`,
+      '-c:a', 'copy', // Copy audio without re-encoding
+      '-shortest', // Match duration to shortest stream
       outputFile
     ];
 
@@ -143,15 +177,25 @@ export class FFmpegSequenceExporter {
       ffmpegArgs.splice(-1, 0, '-movflags', '+faststart');
     }
 
-    await this.ffmpeg.exec(ffmpegArgs);
+    // console.log('FFmpeg args:', ffmpegArgs);
+    
+    try {
+      await this.ffmpeg.exec(ffmpegArgs);
+    } catch (error) {
+      // console.error('FFmpeg execution failed:', error);
+      throw error;
+    }
 
+    // console.log('Reading output file:', outputFile);
     const data = await this.ffmpeg.readFile(outputFile);
+    // console.log('Output file size:', data.byteLength);
     
     // Clean up
     for (let frame = 0; frame < totalFrames; frame++) {
       const filename = `frame_${String(frame).padStart(5, '0')}.jpg`;
       await this.ffmpeg.deleteFile(filename);
     }
+    await this.ffmpeg.deleteFile(inputFile);
     await this.ffmpeg.deleteFile(outputFile);
 
     return new Blob([data], { type: mimeType });

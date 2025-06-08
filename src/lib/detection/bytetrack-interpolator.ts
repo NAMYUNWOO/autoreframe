@@ -14,7 +14,7 @@ export class ByteTrackInterpolator {
   private trackSegments: Map<string, TrackSegment> = new Map();
   
   constructor(byteTrackerParams?: any) {
-    console.log('ByteTrackInterpolator constructor called with params:', byteTrackerParams);
+    // console.log('ByteTrackInterpolator constructor called with params:', byteTrackerParams);
     this.byteTracker = new ByteTracker(byteTrackerParams);
   }
   
@@ -23,7 +23,7 @@ export class ByteTrackInterpolator {
    */
   processFrame(boxes: BoundingBox[], frameNumber: number, timestamp: number): Detection {
     if (frameNumber === 213) {
-      console.log(`Frame 213: ByteTrackInterpolator.processFrame`);
+      // console.log(`Frame 213: ByteTrackInterpolator.processFrame`);
     }
     
     // Run ByteTracker to get tracked boxes

@@ -21,7 +21,7 @@ export function VideoUploader({ onVideoLoad, isDisabled = false }: VideoUploader
     try {
       await onVideoLoad(file);
     } catch (error) {
-      console.error('Failed to load video:', error);
+      // console.error('Failed to load video:', error);
       alert('Failed to load video. Please try another file.');
     }
   }, [onVideoLoad]);
@@ -41,7 +41,7 @@ export function VideoUploader({ onVideoLoad, isDisabled = false }: VideoUploader
     try {
       await onVideoLoad(file);
     } catch (error) {
-      console.error('Failed to load video:', error);
+      // console.error('Failed to load video:', error);
       alert('Failed to load video. Please try another file.');
     }
   }, [onVideoLoad]);

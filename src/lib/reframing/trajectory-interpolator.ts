@@ -19,7 +19,7 @@ export class TrajectoryInterpolator {
     targetTrackId: string,
     totalFrames: number
   ): Detection[] {
-    console.log(`TrajectoryInterpolator: Interpolating trajectory for track ${targetTrackId}`);
+    // console.log(`TrajectoryInterpolator: Interpolating trajectory for track ${targetTrackId}`);
     
     // Extract all existing points for the target track
     const existingPoints = new Map<number, BoundingBox>();
@@ -31,7 +31,7 @@ export class TrajectoryInterpolator {
       }
     }
     
-    console.log(`Found ${existingPoints.size} existing points out of ${totalFrames} total frames`);
+    // console.log(`Found ${existingPoints.size} existing points out of ${totalFrames} total frames`);
     
     // Create full detection array with interpolated data
     const interpolatedDetections: Detection[] = [];
@@ -83,7 +83,7 @@ export class TrajectoryInterpolator {
       }
     }
     
-    console.log(`Created ${interpolatedDetections.length} detections after interpolation`);
+    // console.log(`Created ${interpolatedDetections.length} detections after interpolation`);
     
     return interpolatedDetections;
   }

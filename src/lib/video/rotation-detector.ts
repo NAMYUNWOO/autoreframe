@@ -20,7 +20,7 @@ export class VideoRotationDetector {
         }
       }
     } catch (e) {
-      console.log('Could not access video track settings');
+      // console.log('Could not access video track settings');
     }
 
     // Try to detect rotation from video metadata using experimental API
@@ -30,7 +30,7 @@ export class VideoRotationDetector {
       if (videoTracks && videoTracks.length > 0) {
         const track = videoTracks[0];
         if (track.rotation !== undefined) {
-          console.log('Found rotation in video track:', track.rotation);
+          // console.log('Found rotation in video track:', track.rotation);
           return track.rotation;
         }
       }
@@ -39,7 +39,7 @@ export class VideoRotationDetector {
     }
 
     // Common smartphone video detection heuristic
-    console.log(`Video dimensions: ${videoWidth}x${videoHeight}`);
+    // console.log(`Video dimensions: ${videoWidth}x${videoHeight}`);
     
     // Most smartphone videos in portrait mode need rotation
     if (videoHeight > videoWidth) {
@@ -48,7 +48,7 @@ export class VideoRotationDetector {
       // Common portrait smartphone ratios that indicate rotation needed:
       // 9:16 (0.5625), 3:4 (0.75), 9:18 (0.5), 9:19.5 (0.46)
       if (aspectRatio < 0.8) {
-        console.log('Detected portrait video that likely needs rotation');
+        // console.log('Detected portrait video that likely needs rotation');
         // Don't rotate by default - let user see if detection is working first
         return 0; // Change to 90 if you want auto-rotation
       }

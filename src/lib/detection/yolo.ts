@@ -39,7 +39,7 @@ export class YOLODetector {
       output.dispose();
       dummyInput.dispose();
     } catch (error) {
-      console.error('Failed to initialize YOLO model:', error);
+      // console.error('Failed to initialize YOLO model:', error);
       throw error;
     }
   }

@@ -26,7 +26,7 @@ export class VideoProcessor {
       this.video.onloadedmetadata = async () => {
         // Detect video rotation
         this.videoRotation = await VideoRotationDetector.detectRotation(this.video);
-        console.log('Detected video rotation:', this.videoRotation);
+        // console.log('Detected video rotation:', this.videoRotation);
         
         // Get corrected dimensions
         const correctedDims = VideoRotationDetector.getCorrectedDimensions(
@@ -102,7 +102,7 @@ export class VideoProcessor {
             Math.abs(curr - estimatedFps) < Math.abs(prev - estimatedFps) ? curr : prev
           );
           
-          console.log(`Detected FPS: ${estimatedFps}, using: ${closest}`);
+          // console.log(`Detected FPS: ${estimatedFps}, using: ${closest}`);
           resolve(closest);
         }
       };
@@ -191,7 +191,7 @@ export class VideoProcessor {
         const imageData = await this.extractFrame(timestamp);
         await onFrame(imageData, frameNumber, timestamp);
       } catch (error) {
-        console.error(`Error processing frame ${frameNumber}:`, error);
+        // console.error(`Error processing frame ${frameNumber}:`, error);
       }
     }
   }

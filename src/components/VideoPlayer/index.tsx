@@ -168,7 +168,7 @@ export function VideoPlayer({
     if (showReframing && frameTransform) {
       // Debug: Log every 10 frames to see if transform changes
       if (frameNumber % 10 === 0) {
-        console.log(`VideoPlayer: Frame ${frameNumber}, transform position: (${frameTransform.x.toFixed(1)}, ${frameTransform.y.toFixed(1)}), scale: ${frameTransform.scale.toFixed(2)}`);
+        // console.log(`VideoPlayer: Frame ${frameNumber}, transform position: (${frameTransform.x.toFixed(1)}, ${frameTransform.y.toFixed(1)}), scale: ${frameTransform.scale.toFixed(2)}`);
       }
       
       ctx.strokeStyle = '#ff00ff';

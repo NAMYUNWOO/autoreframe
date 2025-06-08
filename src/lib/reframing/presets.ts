@@ -89,8 +89,9 @@ export function getOutputDimensions(
     height = width / ratio;
   }
   
+  // H.264 requires even dimensions
   return {
-    width: Math.round(width),
-    height: Math.round(height)
+    width: Math.round(width / 2) * 2,
+    height: Math.round(height / 2) * 2
   };
 }

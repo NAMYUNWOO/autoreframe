@@ -17,7 +17,7 @@ export class FFmpegDirectExporter {
 
     const baseURL = '/ffmpeg';
     this.ffmpeg.on('log', ({ message }) => {
-      console.log('[FFmpeg]', message);
+      // console.log('[FFmpeg]', message);
     });
 
     try {
@@ -26,7 +26,7 @@ export class FFmpegDirectExporter {
         wasmURL: `${baseURL}/ffmpeg-core.wasm`,
       });
     } catch (error) {
-      console.warn('Failed to load FFmpeg from local files, falling back to CDN');
+      // console.warn('Failed to load FFmpeg from local files, falling back to CDN');
       const cdnURL = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
       await this.ffmpeg.load({
         coreURL: await toBlobURL(`${cdnURL}/ffmpeg-core.js`, 'text/javascript'),

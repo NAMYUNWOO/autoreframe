@@ -161,7 +161,7 @@ export default function Home() {
       // console.error('Export failed:', error);
       alert(`Failed to export video: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  }, [getVideoElement, metadata, exportVideo, videoFile, transforms]);
+  }, [getVideoElement, metadata, exportVideo, videoFile]);
 
   const handleConfidenceChange = useCallback((threshold: number) => {
     setConfidenceThreshold(threshold);

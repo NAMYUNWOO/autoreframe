@@ -42,8 +42,11 @@ export function VideoPlayer({
   useEffect(() => {
     if (!videoElement || !containerRef.current) return;
 
+    // Capture the container ref value to avoid issues in cleanup
+    const container = containerRef.current;
+
     // Add video to container
-    containerRef.current.appendChild(videoElement);
+    container.appendChild(videoElement);
     videoElement.className = 'w-full h-full object-contain';
 
     // Set up event listeners
@@ -63,8 +66,8 @@ export function VideoPlayer({
       videoElement.removeEventListener('timeupdate', handleTimeUpdate);
       videoElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
       
-      if (containerRef.current?.contains(videoElement)) {
-        containerRef.current.removeChild(videoElement);
+      if (container.contains(videoElement)) {
+        container.removeChild(videoElement);
       }
     };
   }, [videoElement]);

@@ -144,7 +144,7 @@ export function useReframing() {
       setIsExporting(false);
       setExportProgress(100);
     }
-  }, [transforms, config.outputRatio]);
+  }, [transforms, config, storedInitialTargetBox]);
 
   const getFrameTransform = useCallback((frameNumber: number): FrameTransform | undefined => {
     const transform = transforms.get(frameNumber);

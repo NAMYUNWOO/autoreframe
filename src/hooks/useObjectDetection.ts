@@ -112,7 +112,7 @@ export function useObjectDetection() {
     // Don't run head detection here - it will be done selectively in processVideo
 
     return detection;
-  }, [isModelLoaded, useHeadDetection]);
+  }, [isModelLoaded]);
 
   const processVideo = useCallback(async (
     processFrames: (onFrame: (imageData: ImageData, frameNumber: number, timestamp: number) => Promise<void>) => Promise<void>,
@@ -401,7 +401,7 @@ export function useObjectDetection() {
     } finally {
       setIsProcessing(false);
     }
-  }, [isModelLoaded, detectFrame, targetDetection, useHeadDetection]);
+  }, [isModelLoaded, detectFrame, targetDetection, useHeadDetection, useByteTrack]);
 
   const selectTrack = useCallback((trackId: string | null) => {
     setSelectedTrackId(trackId);

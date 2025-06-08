@@ -45,6 +45,91 @@ export function HeadSelector({
     setReframingConfig(prev => ({ ...prev, ...updates }));
   };
 
+  // Draw detection boxes with reframe preview
+  const drawDetections = useCallback((ctx: CanvasRenderingContext2D, detections: BoundingBox[], reframeBox?: { x: number; y: number; width: number; height: number } | null) => {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    
+    // Draw reframe box only in reframe tab
+    if (activeTab === 'reframe' && reframeBox && selectedIndex !== null) {
+      // Draw reframe box with draggable appearance
+      ctx.strokeStyle = isDraggingReframeBox ? '#00ffff' : '#ffff00';
+      ctx.lineWidth = 3;
+      ctx.setLineDash([10, 5]);
+      ctx.strokeRect(reframeBox.x, reframeBox.y, reframeBox.width, reframeBox.height);
+      ctx.setLineDash([]);
+      
+      // Draw drag handle corners
+      const cornerSize = 10;
+      ctx.fillStyle = isDraggingReframeBox ? '#00ffff' : '#ffff00';
+      // Top-left
+      ctx.fillRect(reframeBox.x - cornerSize/2, reframeBox.y - cornerSize/2, cornerSize, cornerSize);
+      // Top-right
+      ctx.fillRect(reframeBox.x + reframeBox.width - cornerSize/2, reframeBox.y - cornerSize/2, cornerSize, cornerSize);
+      // Bottom-left
+      ctx.fillRect(reframeBox.x - cornerSize/2, reframeBox.y + reframeBox.height - cornerSize/2, cornerSize, cornerSize);
+      // Bottom-right
+      ctx.fillRect(reframeBox.x + reframeBox.width - cornerSize/2, reframeBox.y + reframeBox.height - cornerSize/2, cornerSize, cornerSize);
+      
+      // Draw center crosshair
+      const centerX = reframeBox.x + reframeBox.width / 2;
+      const centerY = reframeBox.y + reframeBox.height / 2;
+      ctx.strokeStyle = '#ffff00';
+      ctx.lineWidth = 1;
+      const crossSize = 20;
+      ctx.beginPath();
+      ctx.moveTo(centerX - crossSize, centerY);
+      ctx.lineTo(centerX + crossSize, centerY);
+      ctx.moveTo(centerX, centerY - crossSize);
+      ctx.lineTo(centerX, centerY + crossSize);
+      ctx.stroke();
+    }
+    
+    // Always draw detections
+    detections.forEach((detection, index) => {
+        const isSelected = index === selectedIndex;
+        
+        // Draw bounding box
+        ctx.strokeStyle = isSelected ? '#00ff00' : '#ff0000';
+        ctx.lineWidth = isSelected ? 4 : 2;
+        ctx.strokeRect(detection.x, detection.y, detection.width, detection.height);
+        
+        // Draw label
+        ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
+        ctx.font = 'bold 16px Arial';
+        const trackIdLabel = detection.trackId ? `ID-${detection.trackId}: ` : '';
+        const label = `${trackIdLabel}person ${(detection.confidence * 100).toFixed(0)}%`;
+        const textMetrics = ctx.measureText(label);
+        
+        ctx.fillRect(
+          detection.x,
+          detection.y - 20,
+          textMetrics.width + 8,
+          20
+        );
+        
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, detection.x + 4, detection.y - 4);
+        
+        // Draw head center if available
+        if (detection.headCenterX && detection.headCenterY) {
+          ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
+          ctx.beginPath();
+          ctx.arc(detection.headCenterX, detection.headCenterY, 5, 0, 2 * Math.PI);
+          ctx.fill();
+          
+          // Draw crosshair
+          ctx.strokeStyle = isSelected ? '#00ff00' : '#ff0000';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(detection.headCenterX - 10, detection.headCenterY);
+          ctx.lineTo(detection.headCenterX + 10, detection.headCenterY);
+          ctx.moveTo(detection.headCenterX, detection.headCenterY - 10);
+          ctx.lineTo(detection.headCenterX, detection.headCenterY + 10);
+          ctx.stroke();
+      }
+    });
+  }, [selectedIndex, activeTab, isDraggingReframeBox]);
+
   // Detect heads in first frame
   const detectFirstFrame = useCallback(async () => {
     if (!videoElement || !canvasRef.current || !overlayCanvasRef.current) return;
@@ -209,92 +294,7 @@ export function HeadSelector({
     } finally {
       setIsDetecting(false);
     }
-  }, [videoElement, onSelectHead, confidenceThreshold]);
-
-  // Draw detection boxes with reframe preview
-  const drawDetections = useCallback((ctx: CanvasRenderingContext2D, detections: BoundingBox[], reframeBox?: { x: number; y: number; width: number; height: number } | null) => {
-    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    
-    // Draw reframe box only in reframe tab
-    if (activeTab === 'reframe' && reframeBox && selectedIndex !== null) {
-      // Draw reframe box with draggable appearance
-      ctx.strokeStyle = isDraggingReframeBox ? '#00ffff' : '#ffff00';
-      ctx.lineWidth = 3;
-      ctx.setLineDash([10, 5]);
-      ctx.strokeRect(reframeBox.x, reframeBox.y, reframeBox.width, reframeBox.height);
-      ctx.setLineDash([]);
-      
-      // Draw drag handle corners
-      const cornerSize = 10;
-      ctx.fillStyle = isDraggingReframeBox ? '#00ffff' : '#ffff00';
-      // Top-left
-      ctx.fillRect(reframeBox.x - cornerSize/2, reframeBox.y - cornerSize/2, cornerSize, cornerSize);
-      // Top-right
-      ctx.fillRect(reframeBox.x + reframeBox.width - cornerSize/2, reframeBox.y - cornerSize/2, cornerSize, cornerSize);
-      // Bottom-left
-      ctx.fillRect(reframeBox.x - cornerSize/2, reframeBox.y + reframeBox.height - cornerSize/2, cornerSize, cornerSize);
-      // Bottom-right
-      ctx.fillRect(reframeBox.x + reframeBox.width - cornerSize/2, reframeBox.y + reframeBox.height - cornerSize/2, cornerSize, cornerSize);
-      
-      // Draw center crosshair
-      const centerX = reframeBox.x + reframeBox.width / 2;
-      const centerY = reframeBox.y + reframeBox.height / 2;
-      ctx.strokeStyle = '#ffff00';
-      ctx.lineWidth = 1;
-      const crossSize = 20;
-      ctx.beginPath();
-      ctx.moveTo(centerX - crossSize, centerY);
-      ctx.lineTo(centerX + crossSize, centerY);
-      ctx.moveTo(centerX, centerY - crossSize);
-      ctx.lineTo(centerX, centerY + crossSize);
-      ctx.stroke();
-    }
-    
-    // Always draw detections
-    detections.forEach((detection, index) => {
-        const isSelected = index === selectedIndex;
-        
-        // Draw bounding box
-        ctx.strokeStyle = isSelected ? '#00ff00' : '#ff0000';
-        ctx.lineWidth = isSelected ? 4 : 2;
-        ctx.strokeRect(detection.x, detection.y, detection.width, detection.height);
-        
-        // Draw label
-        ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
-        ctx.font = 'bold 16px Arial';
-        const trackIdLabel = detection.trackId ? `ID-${detection.trackId}: ` : '';
-        const label = `${trackIdLabel}person ${(detection.confidence * 100).toFixed(0)}%`;
-        const textMetrics = ctx.measureText(label);
-        
-        ctx.fillRect(
-          detection.x,
-          detection.y - 20,
-          textMetrics.width + 8,
-          20
-        );
-        
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(label, detection.x + 4, detection.y - 4);
-        
-        // Draw head center if available
-        if (detection.headCenterX && detection.headCenterY) {
-          ctx.fillStyle = isSelected ? '#00ff00' : '#ff0000';
-          ctx.beginPath();
-          ctx.arc(detection.headCenterX, detection.headCenterY, 5, 0, 2 * Math.PI);
-          ctx.fill();
-          
-          // Draw crosshair
-          ctx.strokeStyle = isSelected ? '#00ff00' : '#ff0000';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(detection.headCenterX - 10, detection.headCenterY);
-          ctx.lineTo(detection.headCenterX + 10, detection.headCenterY);
-          ctx.moveTo(detection.headCenterX, detection.headCenterY - 10);
-          ctx.lineTo(detection.headCenterX, detection.headCenterY + 10);
-          ctx.stroke();
-      }
-    });
-  }, [selectedIndex, activeTab, isDraggingReframeBox]);
+  }, [videoElement, confidenceThreshold, drawDetections]);
 
   // Calculate reframe box preview
   const calculateReframeBox = useCallback(() => {
@@ -501,7 +501,7 @@ export function HeadSelector({
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 9l3 3m0 0l-3 3m3-3H8m13 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <p className="font-medium">Great! Now click the "Reframe Settings" tab above to continue.</p>
+                <p className="font-medium">Great! Now click the &quot;Reframe Settings&quot; tab above to continue.</p>
               </div>
             )}
           </div>

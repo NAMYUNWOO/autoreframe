@@ -157,7 +157,6 @@ export class ReframeSizeCalculatorV2 {
     
     // If calculated reframe is too small, adjust it
     if (reframeWidth < minReframeWidth || reframeHeight < minReframeHeight) {
-      console.log(`  WARNING: Reframe too small (${reframeWidth.toFixed(0)}x${reframeHeight.toFixed(0)}), adjusting to minimum`);
       if (reframeWidth < minReframeWidth) {
         reframeWidth = minReframeWidth;
         reframeHeight = reframeWidth / outputRatio;
@@ -247,17 +246,6 @@ export class ReframeSizeCalculatorV2 {
     // Recalculate scale based on final dimensions
     const finalScale = frameWidth / adjustedWidth;
     
-    console.log(`ReframeSizeCalculatorV2:`);
-    console.log(`  Input: ${frameWidth}x${frameHeight} (${inputAspectRatio.toFixed(2)})`);
-    console.log(`  Target: ${targetBox.width}x${targetBox.height} (${(targetSizeRatio * 100).toFixed(1)}% of frame)`);
-    console.log(`  Output ratio: ${outputRatio.toFixed(2)} (${outputRatio < 1 ? 'Portrait' : outputRatio > 1.5 ? 'Landscape' : 'Square/4:3'})`);
-    console.log(`  Base padding: ${basePadding.toFixed(2)}x (from setting: ${settings?.padding || 0.3})`);
-    console.log(`  Final padding: ${paddingMultiplier.toFixed(2)}x`);
-    console.log(`  Padded target: ${paddedTargetWidth.toFixed(0)}x${paddedTargetHeight.toFixed(0)}`);
-    console.log(`  Initial reframe: ${reframeWidth.toFixed(0)}x${reframeHeight.toFixed(0)}`);
-    console.log(`  Final reframe: ${adjustedWidth.toFixed(0)}x${adjustedHeight.toFixed(0)} (ratio: ${(adjustedWidth/adjustedHeight).toFixed(2)})`);
-    console.log(`  Scale: ${finalScale.toFixed(2)} (clamped from ${scale.toFixed(2)})`);
-    console.log(`  View percentage: ${(100/finalScale).toFixed(1)}% of original frame`);
     
     return {
       width: adjustedWidth,
@@ -341,16 +329,12 @@ export class ReframeSizeCalculatorV2 {
       const adjustedWidth = adjustedHeight * outputRatio;
       const adjustedScale = frameWidth / adjustedWidth;
       
-      console.log(`Head-based reframe (adjusted): ${adjustedWidth.toFixed(0)}x${adjustedHeight.toFixed(0)}, scale: ${adjustedScale.toFixed(2)}`);
-      
       return {
         width: adjustedWidth,
         height: adjustedHeight,
         scale: adjustedScale
       };
     }
-    
-    console.log(`Head-based reframe: ${reframeWidth.toFixed(0)}x${reframeHeight.toFixed(0)}, scale: ${clampedScale.toFixed(2)}`);
     
     return {
       width: reframeWidth,

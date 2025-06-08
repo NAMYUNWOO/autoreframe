@@ -9,6 +9,8 @@ interface VideoPlayerProps {
   metadata: VideoMetadata | null;
   detections: Detection[];
   currentTransform?: FrameTransform;
+  transforms?: Map<number, FrameTransform>;
+  getFrameTransform?: (frameNumber: number) => FrameTransform | undefined;
   showDetections: boolean;
   showReframing: boolean;
   outputRatio: string;
@@ -21,6 +23,8 @@ export function VideoPlayer({
   metadata,
   detections,
   currentTransform,
+  transforms,
+  getFrameTransform,
   showDetections,
   showReframing,
   outputRatio,
@@ -102,10 +106,6 @@ export function VideoPlayer({
           const trackIdLabel = box.trackId ? `ID:${box.trackId} ` : '';
           const label = `${trackIdLabel}${box.class} ${(box.confidence * 100).toFixed(0)}%`;
           
-          // Debug: Log confidence values for frame 213
-          if (frameNumber === 213) {
-            console.log(`Frame 213: VideoPlayer - trackId=${box.trackId}, raw confidence=${box.confidence}, displayed as ${(box.confidence * 100).toFixed(0)}%`);
-          }
           ctx.font = 'bold 14px Arial';
           const textMetrics = ctx.measureText(label);
           const padding = 4;
@@ -162,7 +162,15 @@ export function VideoPlayer({
     }
 
     // Draw reframing overlay
-    if (showReframing && currentTransform) {
+    // Get the transform for the current frame if getFrameTransform is provided
+    const frameTransform = getFrameTransform ? getFrameTransform(frameNumber) : currentTransform;
+    
+    if (showReframing && frameTransform) {
+      // Debug: Log every 10 frames to see if transform changes
+      if (frameNumber % 10 === 0) {
+        console.log(`VideoPlayer: Frame ${frameNumber}, transform position: (${frameTransform.x.toFixed(1)}, ${frameTransform.y.toFixed(1)}), scale: ${frameTransform.scale.toFixed(2)}`);
+      }
+      
       ctx.strokeStyle = '#ff00ff';
       ctx.lineWidth = 3;
       ctx.setLineDash([10, 5]);
@@ -188,8 +196,8 @@ export function VideoPlayer({
         height = calculatedDimensions.height;
       } else {
         // Fallback to scale-based calculation
-        const baseCropW = metadata.width / currentTransform.scale;
-        const baseCropH = metadata.height / currentTransform.scale;
+        const baseCropW = metadata.width / frameTransform.scale;
+        const baseCropH = metadata.height / frameTransform.scale;
         
         width = baseCropW;
         height = baseCropH;
@@ -204,13 +212,9 @@ export function VideoPlayer({
         }
       }
       
-      const x = currentTransform.x - width / 2;
-      const y = currentTransform.y - height / 2;
+      const x = frameTransform.x - width / 2;
+      const y = frameTransform.y - height / 2;
       
-      // Debug log for frames 299-300
-      if (frameNumber >= 299 && frameNumber <= 300) {
-        console.log(`VideoPlayer Frame ${frameNumber}: Reframe box ${width.toFixed(0)}x${height.toFixed(0)} at (${x.toFixed(0)}, ${y.toFixed(0)}), scale=${currentTransform.scale.toFixed(2)}`);
-      }
       
       ctx.strokeRect(x, y, width, height);
       ctx.setLineDash([]);
@@ -220,17 +224,17 @@ export function VideoPlayer({
       ctx.lineWidth = 1;
       const crossSize = 20;
       ctx.beginPath();
-      ctx.moveTo(currentTransform.x - crossSize, currentTransform.y);
-      ctx.lineTo(currentTransform.x + crossSize, currentTransform.y);
-      ctx.moveTo(currentTransform.x, currentTransform.y - crossSize);
-      ctx.lineTo(currentTransform.x, currentTransform.y + crossSize);
+      ctx.moveTo(frameTransform.x - crossSize, frameTransform.y);
+      ctx.lineTo(frameTransform.x + crossSize, frameTransform.y);
+      ctx.moveTo(frameTransform.x, frameTransform.y - crossSize);
+      ctx.lineTo(frameTransform.x, frameTransform.y + crossSize);
       ctx.stroke();
     }
 
     if (isPlaying) {
       animationFrameRef.current = requestAnimationFrame(drawOverlay);
     }
-  }, [videoElement, metadata, detections, currentTransform, showDetections, showReframing, outputRatio, currentTime, isPlaying, reframingConfig, initialTargetBox]);
+  }, [videoElement, metadata, detections, currentTransform, getFrameTransform, showDetections, showReframing, outputRatio, currentTime, isPlaying, reframingConfig, initialTargetBox]);
 
   useEffect(() => {
     drawOverlay();
@@ -241,12 +245,10 @@ export function VideoPlayer({
     };
   }, [drawOverlay]);
 
-  // Force redraw when showDetections or showReframing changes
+  // Force redraw when showDetections, showReframing, or currentTime changes
   useEffect(() => {
-    if (!isPlaying) {
-      drawOverlay();
-    }
-  }, [showDetections, showReframing, drawOverlay, isPlaying]);
+    drawOverlay();
+  }, [showDetections, showReframing, currentTime, drawOverlay]);
 
   useEffect(() => {
     if (!metadata || !overlayCanvasRef.current) return;

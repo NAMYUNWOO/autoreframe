@@ -97,9 +97,7 @@ export function useReframing() {
       let blob: Blob;
       
       // Use SimpleExporter
-      console.log('Using SimpleExporter for video export');
       if (options.format === 'mp4') {
-        console.log('MP4 format requested, but only WebM is supported. Using WebM instead.');
         options.format = 'webm'; // Force WebM
       }
       
@@ -126,7 +124,8 @@ export function useReframing() {
   }, [transforms, config.outputRatio]);
 
   const getFrameTransform = useCallback((frameNumber: number): FrameTransform | undefined => {
-    return transforms.get(frameNumber);
+    const transform = transforms.get(frameNumber);
+    return transform;
   }, [transforms]);
 
   const updateTransform = useCallback((frameNumber: number, transform: FrameTransform) => {
@@ -139,7 +138,6 @@ export function useReframing() {
 
   const cancelExport = useCallback(() => {
     // Currently not implemented for FrameAccurateExporter
-    console.warn('Export cancellation not implemented');
   }, []);
 
   const reset = useCallback(() => {

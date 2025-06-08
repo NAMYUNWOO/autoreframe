@@ -19,7 +19,6 @@ export default function Home() {
   const [showDetections, setShowDetections] = useState(true);
   const [showReframing, setShowReframing] = useState(true);
   const [confidenceThreshold, setConfidenceThreshold] = useState(0.3); // 30% default for better detection
-  console.log('Home: Initial confidence threshold state:', confidenceThreshold);
   const [detectionComplete, setDetectionComplete] = useState(false);
   const [showHeadSelector, setShowHeadSelector] = useState(false);
   const [showTrajectoryEditor, setShowTrajectoryEditor] = useState(false);
@@ -58,7 +57,6 @@ export default function Home() {
   // Set initial confidence threshold when model is loaded
   useEffect(() => {
     if (isModelLoaded) {
-      console.log('Home: Setting initial confidence threshold to', confidenceThreshold);
       updateConfidenceThreshold(confidenceThreshold);
     }
   }, [isModelLoaded, confidenceThreshold, updateConfidenceThreshold]);
@@ -146,14 +144,8 @@ export default function Home() {
     const videoElement = getVideoElement();
     if (!videoElement || !metadata) return;
     
-    console.log('Starting export with options:', options);
-    console.log('Video metadata:', metadata);
-    console.log('Transforms available:', transforms.size);
-    
     try {
       let blob = await exportVideo(videoElement, metadata, options);
-      
-      console.log('Export completed, blob size:', blob.size);
       
       // Download the file
       const url = URL.createObjectURL(blob);
@@ -170,7 +162,6 @@ export default function Home() {
   }, [getVideoElement, metadata, exportVideo, videoFile, transforms]);
 
   const handleConfidenceChange = useCallback((threshold: number) => {
-    console.log('Home: handleConfidenceChange called with', threshold, 'from UI');
     setConfidenceThreshold(threshold);
     updateConfidenceThreshold(threshold);
   }, [updateConfidenceThreshold]);
@@ -179,15 +170,10 @@ export default function Home() {
     // Store the track ID
     if (box.trackId) {
       setSelectedTrackIdForByteTrack(box.trackId);
-      console.log('Selected ByteTrack ID:', box.trackId);
-      if (box.headCenterX && box.headCenterY) {
-        console.log('Head center:', box.headCenterX, box.headCenterY);
-      }
     }
     
     // Store initial target box dimensions
     setInitialTargetBox({ width: box.width, height: box.height });
-    console.log('Initial target box dimensions:', box.width, 'x', box.height);
     
     // Create a Detection object with the selected box (including head center info)
     const detection = {
@@ -240,10 +226,25 @@ export default function Home() {
     };
   }, [getVideoElement]);
 
+  // Auto-process reframing after detection from HeadSelector
+  useEffect(() => {
+    if (detectionComplete && startedFromHeadSelector && detections.length > 0 && selectedTrackId) {
+      const selectedTrack = getSelectedTrack();
+      if (selectedTrack && transforms.size === 0) { // Only process if transforms not yet created
+        processReframing(detections, selectedTrack, metadata!, initialTargetBox || undefined);
+      }
+    }
+  }, [detectionComplete, startedFromHeadSelector, detections, selectedTrackId, getSelectedTrack, transforms.size, processReframing, metadata, initialTargetBox]);
+
   // Get current frame transform for video player
+  const currentFrame = metadata && getVideoElement() 
+    ? Math.floor(getVideoElement()!.currentTime * metadata.fps)
+    : 0;
+    
   const currentTransform = metadata && getVideoElement() 
-    ? getFrameTransform(Math.floor(getVideoElement()!.currentTime * metadata.fps))
+    ? getFrameTransform(currentFrame)
     : undefined;
+    
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800">
@@ -342,6 +343,8 @@ export default function Home() {
                   metadata={metadata}
                   detections={detections}
                   currentTransform={currentTransform}
+                  transforms={transforms}
+                  getFrameTransform={getFrameTransform}
                   showDetections={showDetections}
                   showReframing={showReframing && (detectionComplete || transforms.size > 0)}
                   outputRatio={config.outputRatio}
@@ -492,6 +495,8 @@ export default function Home() {
                 metadata={metadata}
                 detections={detections}
                 currentTransform={currentTransform}
+                transforms={transforms}
+                getFrameTransform={getFrameTransform}
                 showDetections={false}
                 showReframing={true}
                 outputRatio={config.outputRatio}

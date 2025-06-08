@@ -86,23 +86,10 @@ export function TrajectoryEditor({
       cropW = calculatedDimensions.width;
       cropH = calculatedDimensions.height;
       
-      // Debug log to verify consistency
-      if (currentFrame % 30 === 0) {
-        const scaleFromTransform = metadata.width / (metadata.width / transform.scale);
-        console.log(`TrajectoryEditor Frame ${currentFrame}:`);
-        console.log(`  Initial target box: ${initialTargetBox.width}x${initialTargetBox.height}`);
-        console.log(`  Calculated dimensions: ${cropW.toFixed(0)}x${cropH.toFixed(0)}`);
-        console.log(`  Scale from transform: ${transform.scale.toFixed(2)}, dimensions from scale: ${(metadata.width/transform.scale).toFixed(0)}x${(metadata.height/transform.scale).toFixed(0)}`);
-        console.log(`  Config: padding=${(reframingConfig.padding * 100).toFixed(0)}%, outputRatio=${reframingConfig.outputRatio}`);
-        if (reframingConfig.reframeBoxOffset) {
-          console.log(`  Offset: x=${reframingConfig.reframeBoxOffset.x}, y=${reframingConfig.reframeBoxOffset.y}`);
-        }
-      }
     } else {
       // Fallback to scale-based calculation
       cropW = metadata.width / transform.scale;
       cropH = metadata.height / transform.scale;
-      console.warn('TrajectoryEditor: No initial target box provided, using scale-based calculation');
     }
     
     // The transform position is already adjusted by the offset in BezierTrajectorySmoother

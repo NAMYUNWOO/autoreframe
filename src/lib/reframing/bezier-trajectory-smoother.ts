@@ -40,12 +40,9 @@ export class BezierTrajectorySmoother {
     initialTargetBox?: { width: number; height: number },
     reframingConfig?: ReframingConfig
   ): Map<number, FrameTransform> {
-    console.log('BezierTrajectorySmoother: Starting trajectory smoothing');
-    
     // Store initial target dimensions if provided
     if (initialTargetBox) {
       this.initialTargetDimensions = initialTargetBox;
-      console.log(`Using initial target dimensions: ${initialTargetBox.width}x${initialTargetBox.height}`);
     }
     
     // Step 1: First interpolate missing frames
@@ -62,11 +59,8 @@ export class BezierTrajectorySmoother {
       return new Map();
     }
     
-    console.log(`Extracted ${rawPoints.length} trajectory points from interpolated data`);
-    
     // Check if we have head center data
     const hasHeadData = rawPoints.some(p => p.headX !== undefined && p.headY !== undefined);
-    console.log(`Head tracking data available: ${hasHeadData}`);
     
     // Step 3: Calculate consistent frame dimensions
     // If we have initial target dimensions from selection, use those
@@ -74,16 +68,13 @@ export class BezierTrajectorySmoother {
     let consistentDimensions: { width: number; height: number };
     if (this.initialTargetDimensions) {
       consistentDimensions = this.initialTargetDimensions;
-      console.log(`Using initial selection dimensions: ${consistentDimensions.width}x${consistentDimensions.height}`);
     } else {
       // Use first frame's dimensions as the baseline
       if (rawPoints.length > 0) {
         consistentDimensions = { width: rawPoints[0].width, height: rawPoints[0].height };
-        console.log(`Using first frame dimensions: ${consistentDimensions.width}x${consistentDimensions.height}`);
       } else {
         // Fallback to median calculation
         consistentDimensions = this.calculateConsistentDimensions(rawPoints);
-        console.log(`Using median dimensions: ${consistentDimensions.width}x${consistentDimensions.height}`);
       }
     }
     
@@ -91,8 +82,6 @@ export class BezierTrajectorySmoother {
     const firstPoint = rawPoints[0];
     const anchorX = firstPoint.headX ?? firstPoint.x;
     const anchorY = firstPoint.headY ?? firstPoint.y;
-    console.log(`Anchor point (first frame): (${anchorX.toFixed(1)}, ${anchorY.toFixed(1)})`);
-    
     // Step 4: Apply initial smoothing to raw points to remove jitter
     const preSmoothPoints = this.applyMovingAverage(
       rawPoints.map(p => ({
@@ -111,7 +100,6 @@ export class BezierTrajectorySmoother {
     
     // Step 5: Create key points for Bezier curves (every N seconds)
     const keyPoints = this.selectKeyPointsFromSmoothed(preSmoothPoints);
-    console.log(`Selected ${keyPoints.length} key points for Bezier curves`);
     
     // Ensure first keypoint is at anchor position
     if (keyPoints.length > 0) {
@@ -582,7 +570,6 @@ export class BezierTrajectorySmoother {
     const consistentWidth = reframeDimensions.width;
     const consistentHeight = reframeDimensions.height;
     
-    console.log(`BezierTrajectorySmoother: Using consistent scale: ${scale}, dimensions: ${consistentWidth}x${consistentHeight}`);
     
     // Create transforms with smooth trajectory and consistent scale
     for (const point of trajectory) {
@@ -606,14 +593,6 @@ export class BezierTrajectorySmoother {
       const clampedX = Math.max(halfWidth, Math.min(frameWidth - halfWidth, targetX));
       const clampedY = Math.max(halfHeight, Math.min(frameHeight - halfHeight, targetY));
       
-      // Debug logging for specific frames and the last frame
-      const isLastFrame = point.frame === trajectory[trajectory.length - 1].frame;
-      if (point.frame >= 299 && point.frame <= 300 || isLastFrame) {
-        console.log(`Frame ${point.frame}${isLastFrame ? ' (LAST)' : ''}: Transform - center=(${clampedX}, ${clampedY}), scale=${scale}, box size=${consistentWidth}x${consistentHeight}`);
-        if (settings?.reframeBoxOffset) {
-          console.log(`  Offset applied: (${settings.reframeBoxOffset.x}, ${settings.reframeBoxOffset.y})`);
-        }
-      }
       
       transforms.set(point.frame, {
         x: clampedX,

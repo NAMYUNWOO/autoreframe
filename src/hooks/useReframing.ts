@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { ReframingEngine } from '@/lib/reframing/engine';
 import { SimpleExporter } from '@/lib/video/simple-exporter';
 import { FFmpegExporter } from '@/lib/video/ffmpeg-exporter';
+import { FFmpegSequenceExporter } from '@/lib/video/ffmpeg-sequence-exporter';
 import { 
   ReframingConfig, 
   FrameTransform, 
@@ -30,6 +31,7 @@ export function useReframing() {
   const engineRef = useRef<ReframingEngine | null>(null);
   const simpleExporterRef = useRef<SimpleExporter | null>(null);
   const ffmpegExporterRef = useRef<FFmpegExporter | null>(null);
+  const ffmpegSequenceExporterRef = useRef<FFmpegSequenceExporter | null>(null);
 
   // Initialize reframing engine
   useEffect(() => {
@@ -103,13 +105,13 @@ export function useReframing() {
     try {
       let blob: Blob;
       
-      // Use FFmpegExporter for MOV and MP4, SimpleExporter for WebM
+      // Use FFmpegSequenceExporter for MOV/MP4 for better frame accuracy
       if (options.format === 'mov' || options.format === 'mp4') {
-        if (!ffmpegExporterRef.current) {
-          ffmpegExporterRef.current = new FFmpegExporter();
+        if (!ffmpegSequenceExporterRef.current) {
+          ffmpegSequenceExporterRef.current = new FFmpegSequenceExporter();
         }
         
-        blob = await ffmpegExporterRef.current.export(
+        blob = await ffmpegSequenceExporterRef.current.export(
           videoElement,
           transforms,
           metadata,

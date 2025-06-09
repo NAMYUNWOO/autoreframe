@@ -20,7 +20,7 @@ interface ControlPoint {
 
 export class BezierTrajectorySmoother {
   private fps: number = 30;
-  private segmentDuration: number = 2; // 2 second segments for bezier curves
+  private segmentDuration: number = 0.5; // Shorter segments for smoother curves
   private interpolator: TrajectoryInterpolator;
   private initialTargetDimensions: { width: number; height: number } | null = null;
   
@@ -29,7 +29,7 @@ export class BezierTrajectorySmoother {
   }
   
   /**
-   * Create smooth trajectory using Bezier curves
+   * Create smooth trajectory using adaptive smoothing
    */
   smoothTrajectory(
     detections: Detection[],
@@ -63,66 +63,45 @@ export class BezierTrajectorySmoother {
     const hasHeadData = rawPoints.some(p => p.headX !== undefined && p.headY !== undefined);
     
     // Step 3: Calculate consistent frame dimensions
-    // If we have initial target dimensions from selection, use those
-    // Otherwise, calculate from the first few frames
     let consistentDimensions: { width: number; height: number };
     if (this.initialTargetDimensions) {
       consistentDimensions = this.initialTargetDimensions;
     } else {
-      // Use first frame's dimensions as the baseline
       if (rawPoints.length > 0) {
         consistentDimensions = { width: rawPoints[0].width, height: rawPoints[0].height };
       } else {
-        // Fallback to median calculation
         consistentDimensions = this.calculateConsistentDimensions(rawPoints);
       }
     }
     
-    // Store the first frame position as anchor point
-    const firstPoint = rawPoints[0];
-    const anchorX = firstPoint.headX ?? firstPoint.x;
-    const anchorY = firstPoint.headY ?? firstPoint.y;
-    // Step 4: Apply initial smoothing to raw points to remove jitter
-    const preSmoothPoints = this.applyMovingAverage(
+    // Step 4: Apply adaptive smoothing based on movement speed
+    const smoothedPoints = this.applyAdaptiveSmoothing(
       rawPoints.map(p => ({
         frame: p.frame,
         x: p.headX ?? p.x,
         y: p.headY ?? p.y
-      })),
-      5 // Small window for initial smoothing
+      }))
     );
     
-    // Restore the first frame to anchor position after smoothing
-    if (preSmoothPoints.length > 0) {
-      preSmoothPoints[0].x = anchorX;
-      preSmoothPoints[0].y = anchorY;
-    }
+    // Step 5: Select key points with shorter intervals for better tracking
+    const keyPoints = this.selectAdaptiveKeyPoints(smoothedPoints);
     
-    // Step 5: Create key points for Bezier curves (every N seconds)
-    const keyPoints = this.selectKeyPointsFromSmoothed(preSmoothPoints);
+    // Step 6: Generate smooth Bezier curves with velocity prediction
+    const controlPoints = this.generatePredictiveBezierControlPoints(keyPoints);
     
-    // Ensure first keypoint is at anchor position
-    if (keyPoints.length > 0) {
-      keyPoints[0].x = anchorX;
-      keyPoints[0].y = anchorY;
-    }
-    
-    // Step 6: Generate Bezier control points with special handling for first segment
-    const controlPoints = this.generateBezierControlPointsWithAnchor(keyPoints, anchorX, anchorY);
-    
-    // Step 7: Interpolate smooth trajectory using Bezier curves
+    // Step 7: Interpolate trajectory
     const smoothedTrajectory = this.interpolateBezierTrajectory(
       controlPoints,
       rawPoints[0].frame,
       rawPoints[rawPoints.length - 1].frame
     );
     
-    // Step 8: Apply final smoothing with larger moving average, but preserve first frame
-    const finalTrajectory = this.applyMovingAverageWithAnchor(smoothedTrajectory, 30, rawPoints[0].frame, anchorX, anchorY);
+    // Step 8: Apply final stabilization
+    const stabilizedTrajectory = this.applyFinalStabilization(smoothedTrajectory);
     
-    // Step 9: Convert to frame transforms with consistent dimensions
+    // Step 9: Convert to frame transforms
     return this.createFrameTransforms(
-      finalTrajectory,
+      stabilizedTrajectory,
       consistentDimensions,
       frameWidth,
       frameHeight,
@@ -181,74 +160,480 @@ export class BezierTrajectorySmoother {
   }
   
   /**
-   * Select key points from smoothed trajectory
+   * Apply adaptive smoothing based on movement patterns
    */
-  private selectKeyPointsFromSmoothed(smoothedPoints: ControlPoint[]): ControlPoint[] {
-    const segmentFrames = this.segmentDuration * this.fps;
+  private applyAdaptiveSmoothing(points: ControlPoint[]): ControlPoint[] {
+    if (points.length < 3) return points;
+    
+    const smoothed: ControlPoint[] = [];
+    
+    // Calculate both short-term and long-term velocities
+    const shortTermWindow = 5;  // ~0.17s at 30fps
+    const longTermWindow = 30;  // ~1s at 30fps
+    
+    // Analyze motion patterns
+    const motionAnalysis = this.analyzeMotionPatterns(points, shortTermWindow, longTermWindow);
+    
+    // Apply adaptive smoothing based on motion analysis
+    for (let i = 0; i < points.length; i++) {
+      if (i === 0 || i === points.length - 1) {
+        smoothed.push(points[i]);
+        continue;
+      }
+      
+      const analysis = motionAnalysis[i];
+      
+      // Determine smoothing strategy based on motion pattern
+      let windowSize: number;
+      let predictionWeight: number;
+      
+      if (analysis.isConsistentMotion && !analysis.isSuddenChange) {
+        // Consistent motion: strong smoothing + prediction
+        windowSize = 25;
+        predictionWeight = 0.3;
+      } else if (analysis.isSuddenChange) {
+        // Sudden change: minimal smoothing for quick response
+        windowSize = 5;
+        predictionWeight = 0.1;
+      } else {
+        // Variable motion: moderate smoothing
+        windowSize = 15;
+        predictionWeight = 0.2;
+      }
+      
+      // Apply smoothing with motion prediction
+      const smoothedPoint = this.applySmoothingWithPrediction(
+        points, 
+        i, 
+        windowSize, 
+        analysis.avgVelocity,
+        predictionWeight
+      );
+      
+      smoothed.push(smoothedPoint);
+    }
+    
+    return smoothed;
+  }
+  
+  /**
+   * Analyze motion patterns at each point
+   */
+  private analyzeMotionPatterns(
+    points: ControlPoint[], 
+    shortWindow: number, 
+    longWindow: number
+  ): Array<{
+    avgVelocity: { x: number; y: number };
+    velocityVariance: number;
+    isConsistentMotion: boolean;
+    isSuddenChange: boolean;
+  }> {
+    const analysis: Array<any> = [];
+    
+    for (let i = 0; i < points.length; i++) {
+      // Calculate short-term velocity
+      const shortVel = this.calculateAverageVelocity(points, i, shortWindow);
+      
+      // Calculate long-term velocity
+      const longVel = this.calculateAverageVelocity(points, i, longWindow);
+      
+      // Calculate velocity variance (motion consistency)
+      const variance = this.calculateVelocityVariance(points, i, longWindow);
+      
+      // Detect sudden changes
+      const velocityDiff = Math.sqrt(
+        Math.pow(shortVel.x - longVel.x, 2) + 
+        Math.pow(shortVel.y - longVel.y, 2)
+      );
+      const avgSpeed = Math.sqrt(longVel.x * longVel.x + longVel.y * longVel.y);
+      const isSuddenChange = velocityDiff > avgSpeed * 0.5;
+      
+      // Determine if motion is consistent
+      const isConsistentMotion = variance < avgSpeed * 0.3;
+      
+      analysis.push({
+        avgVelocity: longVel,
+        velocityVariance: variance,
+        isConsistentMotion,
+        isSuddenChange
+      });
+    }
+    
+    return analysis;
+  }
+  
+  /**
+   * Calculate average velocity over a window
+   */
+  private calculateAverageVelocity(
+    points: ControlPoint[], 
+    centerIdx: number, 
+    windowSize: number
+  ): { x: number; y: number } {
+    let vxSum = 0, vySum = 0, count = 0;
+    
+    const startIdx = Math.max(1, centerIdx - windowSize);
+    const endIdx = Math.min(points.length - 1, centerIdx + windowSize);
+    
+    for (let i = startIdx; i < endIdx; i++) {
+      const dx = points[i].x - points[i-1].x;
+      const dy = points[i].y - points[i-1].y;
+      const dt = points[i].frame - points[i-1].frame;
+      
+      if (dt > 0) {
+        vxSum += dx / dt;
+        vySum += dy / dt;
+        count++;
+      }
+    }
+    
+    return {
+      x: count > 0 ? vxSum / count : 0,
+      y: count > 0 ? vySum / count : 0
+    };
+  }
+  
+  /**
+   * Calculate velocity variance (measure of motion consistency)
+   */
+  private calculateVelocityVariance(
+    points: ControlPoint[], 
+    centerIdx: number, 
+    windowSize: number
+  ): number {
+    const velocities: Array<{ x: number; y: number }> = [];
+    
+    const startIdx = Math.max(1, centerIdx - windowSize);
+    const endIdx = Math.min(points.length - 1, centerIdx + windowSize);
+    
+    // Collect velocities
+    for (let i = startIdx; i < endIdx; i++) {
+      const dx = points[i].x - points[i-1].x;
+      const dy = points[i].y - points[i-1].y;
+      const dt = points[i].frame - points[i-1].frame;
+      
+      if (dt > 0) {
+        velocities.push({ x: dx / dt, y: dy / dt });
+      }
+    }
+    
+    if (velocities.length < 2) return 0;
+    
+    // Calculate mean velocity
+    const meanVel = velocities.reduce(
+      (acc, v) => ({ x: acc.x + v.x, y: acc.y + v.y }),
+      { x: 0, y: 0 }
+    );
+    meanVel.x /= velocities.length;
+    meanVel.y /= velocities.length;
+    
+    // Calculate variance
+    const variance = velocities.reduce((acc, v) => {
+      const dx = v.x - meanVel.x;
+      const dy = v.y - meanVel.y;
+      return acc + Math.sqrt(dx * dx + dy * dy);
+    }, 0) / velocities.length;
+    
+    return variance;
+  }
+  
+  /**
+   * Apply smoothing with motion prediction
+   */
+  private applySmoothingWithPrediction(
+    points: ControlPoint[],
+    centerIdx: number,
+    windowSize: number,
+    avgVelocity: { x: number; y: number },
+    predictionWeight: number
+  ): ControlPoint {
+    let weightedX = 0, weightedY = 0, totalWeight = 0;
+    
+    // Apply Gaussian smoothing
+    const sigma = windowSize / 3;
+    const halfWindow = Math.floor(windowSize / 2);
+    
+    for (let j = Math.max(0, centerIdx - halfWindow); 
+         j <= Math.min(points.length - 1, centerIdx + halfWindow); j++) {
+      const distance = Math.abs(j - centerIdx);
+      const weight = Math.exp(-(distance * distance) / (2 * sigma * sigma));
+      
+      weightedX += points[j].x * weight;
+      weightedY += points[j].y * weight;
+      totalWeight += weight;
+    }
+    
+    const smoothedX = weightedX / totalWeight;
+    const smoothedY = weightedY / totalWeight;
+    
+    // Apply motion prediction to compensate for smoothing delay
+    const lagFrames = halfWindow / 2; // Estimated lag
+    const predictedX = smoothedX + avgVelocity.x * lagFrames * predictionWeight;
+    const predictedY = smoothedY + avgVelocity.y * lagFrames * predictionWeight;
+    
+    return {
+      frame: points[centerIdx].frame,
+      x: predictedX,
+      y: predictedY
+    };
+  }
+  
+  /**
+   * Select adaptive key points based on movement patterns
+   */
+  private selectAdaptiveKeyPoints(points: ControlPoint[]): ControlPoint[] {
     const keyPoints: ControlPoint[] = [];
+    const segmentFrames = this.segmentDuration * this.fps;
     
     // Always include first point
-    keyPoints.push(smoothedPoints[0]);
+    keyPoints.push(points[0]);
     
-    // Add key points at regular intervals
-    let currentFrame = smoothedPoints[0].frame + segmentFrames;
-    while (currentFrame < smoothedPoints[smoothedPoints.length - 1].frame) {
-      // Find closest point to current frame
-      const closestPoint = smoothedPoints.find(p => p.frame >= currentFrame) || smoothedPoints[smoothedPoints.length - 1];
-      if (closestPoint && !keyPoints.some(kp => kp.frame === closestPoint.frame)) {
-        keyPoints.push(closestPoint);
+    let lastKeyFrame = points[0].frame;
+    
+    for (let i = 1; i < points.length - 1; i++) {
+      const point = points[i];
+      
+      // Add key point at regular intervals or when significant direction change
+      if (point.frame - lastKeyFrame >= segmentFrames) {
+        keyPoints.push(point);
+        lastKeyFrame = point.frame;
+      } else if (i > 1) {
+        // Check for direction change
+        const prev = points[i-1];
+        const next = points[i+1];
+        
+        const angle1 = Math.atan2(point.y - prev.y, point.x - prev.x);
+        const angle2 = Math.atan2(next.y - point.y, next.x - point.x);
+        const angleDiff = Math.abs(angle2 - angle1);
+        
+        if (angleDiff > Math.PI / 4) { // 45 degree change
+          keyPoints.push(point);
+          lastKeyFrame = point.frame;
+        }
       }
-      currentFrame += segmentFrames;
     }
     
     // Always include last point
-    const lastPoint = smoothedPoints[smoothedPoints.length - 1];
-    if (!keyPoints.some(kp => kp.frame === lastPoint.frame)) {
-      keyPoints.push(lastPoint);
-    }
+    keyPoints.push(points[points.length - 1]);
     
     return keyPoints;
   }
   
   /**
-   * Select key points for Bezier curves (old method)
+   * Generate Bezier control points with velocity prediction
    */
-  private selectKeyPoints(points: TrajectoryPoint[]): ControlPoint[] {
-    const segmentFrames = this.segmentDuration * this.fps;
-    const keyPoints: ControlPoint[] = [];
+  private generatePredictiveBezierControlPoints(keyPoints: ControlPoint[]): ControlPoint[] {
+    if (keyPoints.length < 2) return keyPoints;
     
-    // Always include first point
-    keyPoints.push({
-      frame: points[0].frame,
-      x: points[0].headX ?? points[0].x,
-      y: points[0].headY ?? points[0].y
-    });
+    const controlPoints: ControlPoint[] = [];
+    controlPoints.push(keyPoints[0]);
     
-    // Add key points at regular intervals
-    let currentFrame = points[0].frame + segmentFrames;
-    while (currentFrame < points[points.length - 1].frame) {
-      // Find closest point to current frame
-      const closestPoint = this.findClosestPoint(points, currentFrame);
-      if (closestPoint) {
-        keyPoints.push({
-          frame: closestPoint.frame,
-          x: closestPoint.headX ?? closestPoint.x,
-          y: closestPoint.headY ?? closestPoint.y
-        });
+    for (let i = 0; i < keyPoints.length - 1; i++) {
+      const p0 = keyPoints[Math.max(0, i - 1)];
+      const p1 = keyPoints[i];
+      const p2 = keyPoints[i + 1];
+      const p3 = keyPoints[Math.min(keyPoints.length - 1, i + 2)];
+      
+      // Calculate velocities for prediction
+      const v1x = i > 0 ? (p1.x - p0.x) / (p1.frame - p0.frame) : 0;
+      const v1y = i > 0 ? (p1.y - p0.y) / (p1.frame - p0.frame) : 0;
+      const v2x = (p2.x - p1.x) / (p2.frame - p1.frame);
+      const v2y = (p2.y - p1.y) / (p2.frame - p1.frame);
+      
+      const tension = 0.5;  // Increased for smoother curves
+      const predictionFactor = 0.2;  // Reduced for less aggressive prediction
+      
+      // Control point 1 with velocity prediction
+      const cp1x = p1.x + (p2.x - p0.x) * tension + v1x * (p2.frame - p1.frame) * predictionFactor;
+      const cp1y = p1.y + (p2.y - p0.y) * tension + v1y * (p2.frame - p1.frame) * predictionFactor;
+      
+      // Control point 2 with velocity prediction
+      const cp2x = p2.x - (p3.x - p1.x) * tension - v2x * (p2.frame - p1.frame) * predictionFactor;
+      const cp2y = p2.y - (p3.y - p1.y) * tension - v2y * (p2.frame - p1.frame) * predictionFactor;
+      
+      controlPoints.push({
+        frame: p1.frame + (p2.frame - p1.frame) * 0.33,
+        x: cp1x,
+        y: cp1y
+      });
+      
+      controlPoints.push({
+        frame: p1.frame + (p2.frame - p1.frame) * 0.67,
+        x: cp2x,
+        y: cp2y
+      });
+      
+      if (i === keyPoints.length - 2) {
+        controlPoints.push(p2);
       }
-      currentFrame += segmentFrames;
     }
     
-    // Always include last point
-    const lastPoint = points[points.length - 1];
-    keyPoints.push({
-      frame: lastPoint.frame,
-      x: lastPoint.headX ?? lastPoint.x,
-      y: lastPoint.headY ?? lastPoint.y
-    });
-    
-    return keyPoints;
+    return controlPoints;
   }
+  
+  /**
+   * Apply final stabilization to reduce jitter
+   */
+  private applyFinalStabilization(trajectory: ControlPoint[]): ControlPoint[] {
+    // Analyze overall motion to determine stabilization strength
+    const motionStats = this.analyzeOverallMotion(trajectory);
+    
+    // First pass: Apply adaptive median filter
+    const medianFiltered: ControlPoint[] = [];
+    const baseMedianSize = motionStats.hasHighFrequencyNoise ? 5 : 3;
+    
+    for (let i = 0; i < trajectory.length; i++) {
+      if (i < baseMedianSize || i >= trajectory.length - baseMedianSize) {
+        medianFiltered.push(trajectory[i]);
+        continue;
+      }
+      
+      // Check local motion intensity
+      const localMotion = this.getLocalMotionIntensity(trajectory, i, 10);
+      const medianSize = localMotion > motionStats.avgMotion * 2 ? 3 : baseMedianSize;
+      
+      const xValues: number[] = [];
+      const yValues: number[] = [];
+      
+      for (let j = Math.max(0, i - medianSize); 
+           j <= Math.min(trajectory.length - 1, i + medianSize); j++) {
+        xValues.push(trajectory[j].x);
+        yValues.push(trajectory[j].y);
+      }
+      
+      xValues.sort((a, b) => a - b);
+      yValues.sort((a, b) => a - b);
+      
+      medianFiltered.push({
+        frame: trajectory[i].frame,
+        x: xValues[Math.floor(xValues.length / 2)],
+        y: yValues[Math.floor(yValues.length / 2)]
+      });
+    }
+    
+    // Second pass: Apply gentle smoothing only where needed
+    const stabilized: ControlPoint[] = [];
+    
+    for (let i = 0; i < medianFiltered.length; i++) {
+      if (i < 2 || i >= medianFiltered.length - 2) {
+        stabilized.push(medianFiltered[i]);
+        continue;
+      }
+      
+      // Check if this point needs stabilization
+      const jitter = this.calculateLocalJitter(medianFiltered, i);
+      
+      if (jitter < motionStats.avgMotion * 0.1) {
+        // Low jitter: no additional smoothing needed
+        stabilized.push(medianFiltered[i]);
+      } else {
+        // Apply light smoothing
+        const smoothingWindow = 3;
+        let sumX = 0, sumY = 0, count = 0;
+        
+        for (let j = i - smoothingWindow; j <= i + smoothingWindow; j++) {
+          if (j >= 0 && j < medianFiltered.length) {
+            sumX += medianFiltered[j].x;
+            sumY += medianFiltered[j].y;
+            count++;
+          }
+        }
+        
+        stabilized.push({
+          frame: medianFiltered[i].frame,
+          x: sumX / count,
+          y: sumY / count
+        });
+      }
+    }
+    
+    return stabilized;
+  }
+  
+  /**
+   * Analyze overall motion characteristics
+   */
+  private analyzeOverallMotion(trajectory: ControlPoint[]): {
+    avgMotion: number;
+    maxMotion: number;
+    hasHighFrequencyNoise: boolean;
+  } {
+    let totalMotion = 0;
+    let maxMotion = 0;
+    let highFreqChanges = 0;
+    
+    for (let i = 1; i < trajectory.length; i++) {
+      const dx = trajectory[i].x - trajectory[i-1].x;
+      const dy = trajectory[i].y - trajectory[i-1].y;
+      const motion = Math.sqrt(dx * dx + dy * dy);
+      
+      totalMotion += motion;
+      maxMotion = Math.max(maxMotion, motion);
+      
+      // Check for high frequency changes
+      if (i > 1) {
+        const prevDx = trajectory[i-1].x - trajectory[i-2].x;
+        const prevDy = trajectory[i-1].y - trajectory[i-2].y;
+        
+        const dirChange = Math.abs(Math.atan2(dy, dx) - Math.atan2(prevDy, prevDx));
+        if (dirChange > Math.PI / 4) {
+          highFreqChanges++;
+        }
+      }
+    }
+    
+    return {
+      avgMotion: totalMotion / (trajectory.length - 1),
+      maxMotion: maxMotion,
+      hasHighFrequencyNoise: highFreqChanges > trajectory.length * 0.2
+    };
+  }
+  
+  /**
+   * Get local motion intensity
+   */
+  private getLocalMotionIntensity(
+    trajectory: ControlPoint[], 
+    centerIdx: number, 
+    windowSize: number
+  ): number {
+    let totalMotion = 0;
+    let count = 0;
+    
+    const start = Math.max(1, centerIdx - windowSize);
+    const end = Math.min(trajectory.length - 1, centerIdx + windowSize);
+    
+    for (let i = start; i < end; i++) {
+      const dx = trajectory[i].x - trajectory[i-1].x;
+      const dy = trajectory[i].y - trajectory[i-1].y;
+      totalMotion += Math.sqrt(dx * dx + dy * dy);
+      count++;
+    }
+    
+    return count > 0 ? totalMotion / count : 0;
+  }
+  
+  /**
+   * Calculate local jitter
+   */
+  private calculateLocalJitter(
+    trajectory: ControlPoint[], 
+    centerIdx: number
+  ): number {
+    if (centerIdx < 2 || centerIdx >= trajectory.length - 2) return 0;
+    
+    // Calculate expected position based on surrounding points
+    const expectedX = (trajectory[centerIdx - 1].x + trajectory[centerIdx + 1].x) / 2;
+    const expectedY = (trajectory[centerIdx - 1].y + trajectory[centerIdx + 1].y) / 2;
+    
+    // Calculate deviation
+    const dx = trajectory[centerIdx].x - expectedX;
+    const dy = trajectory[centerIdx].y - expectedY;
+    
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  
   
   /**
    * Find closest point to target frame
@@ -268,131 +653,7 @@ export class BezierTrajectorySmoother {
     return closest;
   }
   
-  /**
-   * Generate Bezier control points for smooth curves
-   */
-  private generateBezierControlPoints(keyPoints: ControlPoint[]): ControlPoint[] {
-    if (keyPoints.length < 2) return keyPoints;
-    
-    const controlPoints: ControlPoint[] = [];
-    
-    // Add first point
-    controlPoints.push(keyPoints[0]);
-    
-    // Generate control points for each segment
-    for (let i = 0; i < keyPoints.length - 1; i++) {
-      const p0 = keyPoints[Math.max(0, i - 1)];
-      const p1 = keyPoints[i];
-      const p2 = keyPoints[i + 1];
-      const p3 = keyPoints[Math.min(keyPoints.length - 1, i + 2)];
-      
-      // Calculate tangent for smooth curves
-      const tension = 0.5; // Higher tension for smoother curves
-      
-      // Control point 1
-      const cp1x = p1.x + (p2.x - p0.x) * tension;
-      const cp1y = p1.y + (p2.y - p0.y) * tension;
-      
-      // Control point 2
-      const cp2x = p2.x - (p3.x - p1.x) * tension;
-      const cp2y = p2.y - (p3.y - p1.y) * tension;
-      
-      // Add control points
-      controlPoints.push({
-        frame: p1.frame + (p2.frame - p1.frame) * 0.33,
-        x: cp1x,
-        y: cp1y
-      });
-      
-      controlPoints.push({
-        frame: p1.frame + (p2.frame - p1.frame) * 0.67,
-        x: cp2x,
-        y: cp2y
-      });
-      
-      // Add end point of segment
-      if (i === keyPoints.length - 2) {
-        controlPoints.push(p2);
-      }
-    }
-    
-    return controlPoints;
-  }
   
-  /**
-   * Generate Bezier control points with special handling for anchor point
-   */
-  private generateBezierControlPointsWithAnchor(keyPoints: ControlPoint[], anchorX: number, anchorY: number): ControlPoint[] {
-    if (keyPoints.length < 2) return keyPoints;
-    
-    const controlPoints: ControlPoint[] = [];
-    
-    // Add first point (anchor)
-    controlPoints.push({
-      frame: keyPoints[0].frame,
-      x: anchorX,
-      y: anchorY
-    });
-    
-    // Generate control points for each segment
-    for (let i = 0; i < keyPoints.length - 1; i++) {
-      const p0 = keyPoints[Math.max(0, i - 1)];
-      const p1 = keyPoints[i];
-      const p2 = keyPoints[i + 1];
-      const p3 = keyPoints[Math.min(keyPoints.length - 1, i + 2)];
-      
-      // For the first segment, ensure smooth departure from anchor
-      if (i === 0) {
-        // First control point starts from anchor position
-        const cp1x = anchorX;
-        const cp1y = anchorY;
-        
-        // Second control point creates smooth transition
-        const cp2x = p2.x - (p2.x - anchorX) * 0.3;
-        const cp2y = p2.y - (p2.y - anchorY) * 0.3;
-        
-        controlPoints.push({
-          frame: p1.frame + (p2.frame - p1.frame) * 0.33,
-          x: cp1x,
-          y: cp1y
-        });
-        
-        controlPoints.push({
-          frame: p1.frame + (p2.frame - p1.frame) * 0.67,
-          x: cp2x,
-          y: cp2y
-        });
-      } else {
-        // Normal tangent calculation for other segments
-        const tension = 0.5;
-        
-        const cp1x = p1.x + (p2.x - p0.x) * tension;
-        const cp1y = p1.y + (p2.y - p0.y) * tension;
-        
-        const cp2x = p2.x - (p3.x - p1.x) * tension;
-        const cp2y = p2.y - (p3.y - p1.y) * tension;
-        
-        controlPoints.push({
-          frame: p1.frame + (p2.frame - p1.frame) * 0.33,
-          x: cp1x,
-          y: cp1y
-        });
-        
-        controlPoints.push({
-          frame: p1.frame + (p2.frame - p1.frame) * 0.67,
-          x: cp2x,
-          y: cp2y
-        });
-      }
-      
-      // Add end point of segment
-      if (i === keyPoints.length - 2) {
-        controlPoints.push(p2);
-      }
-    }
-    
-    return controlPoints;
-  }
   
   /**
    * Interpolate smooth trajectory using Bezier curves
@@ -452,79 +713,6 @@ export class BezierTrajectorySmoother {
     };
   }
   
-  /**
-   * Apply moving average for final smoothing
-   */
-  private applyMovingAverage(trajectory: ControlPoint[], windowSize: number): ControlPoint[] {
-    const smoothed: ControlPoint[] = [];
-    const halfWindow = Math.floor(windowSize / 2);
-    
-    for (let i = 0; i < trajectory.length; i++) {
-      let sumX = 0, sumY = 0, count = 0;
-      
-      for (let j = Math.max(0, i - halfWindow); j <= Math.min(trajectory.length - 1, i + halfWindow); j++) {
-        sumX += trajectory[j].x;
-        sumY += trajectory[j].y;
-        count++;
-      }
-      
-      smoothed.push({
-        frame: trajectory[i].frame,
-        x: sumX / count,
-        y: sumY / count
-      });
-    }
-    
-    return smoothed;
-  }
-  
-  /**
-   * Apply moving average while preserving anchor point
-   */
-  private applyMovingAverageWithAnchor(
-    trajectory: ControlPoint[], 
-    windowSize: number, 
-    firstFrame: number,
-    anchorX: number,
-    anchorY: number
-  ): ControlPoint[] {
-    const smoothed: ControlPoint[] = [];
-    const halfWindow = Math.floor(windowSize / 2);
-    
-    for (let i = 0; i < trajectory.length; i++) {
-      if (trajectory[i].frame === firstFrame) {
-        // First frame always uses anchor position
-        smoothed.push({
-          frame: trajectory[i].frame,
-          x: anchorX,
-          y: anchorY
-        });
-      } else {
-        // For frames near the beginning, use smaller window
-        const distanceFromFirst = trajectory[i].frame - firstFrame;
-        const adaptiveWindow = distanceFromFirst < 30 ? 
-          Math.min(distanceFromFirst, halfWindow) : halfWindow;
-        
-        let sumX = 0, sumY = 0, count = 0;
-        
-        for (let j = Math.max(0, i - adaptiveWindow); j <= Math.min(trajectory.length - 1, i + adaptiveWindow); j++) {
-          // Give more weight to frames closer to current frame
-          const weight = 1;
-          sumX += trajectory[j].x * weight;
-          sumY += trajectory[j].y * weight;
-          count += weight;
-        }
-        
-        smoothed.push({
-          frame: trajectory[i].frame,
-          x: sumX / count,
-          y: sumY / count
-        });
-      }
-    }
-    
-    return smoothed;
-  }
   
   /**
    * Convert smooth trajectory to frame transforms

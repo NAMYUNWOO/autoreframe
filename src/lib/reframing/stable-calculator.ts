@@ -80,22 +80,26 @@ export class StableFrameCalculator {
       let stableCenterY = headCenterY;
       
       if (this.boxHistory.length >= 5) {
-        // Use median of recent centers to remove outliers
-        const recentCenters = this.boxHistory.slice(-10);
+        // Use weighted average of recent centers for stability
+        const recentCenters = this.boxHistory.slice(-15);
         
-        // Sort centers
-        const sortedX = recentCenters.map(h => h.centerX).sort((a, b) => a - b);
-        const sortedY = recentCenters.map(h => h.centerY).sort((a, b) => a - b);
+        // Apply Gaussian weights for smooth averaging
+        let weightedX = 0, weightedY = 0, totalWeight = 0;
+        const sigma = recentCenters.length / 3;
         
-        // Get median
-        const midIdx = Math.floor(sortedX.length / 2);
-        const medianX = sortedX[midIdx];
-        const medianY = sortedY[midIdx];
+        for (let i = 0; i < recentCenters.length; i++) {
+          const distance = recentCenters.length - i - 1;
+          const weight = Math.exp(-(distance * distance) / (2 * sigma * sigma));
+          
+          weightedX += recentCenters[i].centerX * weight;
+          weightedY += recentCenters[i].centerY * weight;
+          totalWeight += weight;
+        }
         
-        // Weighted average between current and median
-        const weight = 0.7; // How much to trust the median
-        stableCenterX = medianX * weight + headCenterX * (1 - weight);
-        stableCenterY = medianY * weight + headCenterY * (1 - weight);
+        // Blend with current position
+        const historyWeight = 0.8; // Trust history more for stability
+        stableCenterX = (weightedX / totalWeight) * historyWeight + headCenterX * (1 - historyWeight);
+        stableCenterY = (weightedY / totalWeight) * historyWeight + headCenterY * (1 - historyWeight);
       }
       
       // Calculate stable box dimensions using average

@@ -19,7 +19,7 @@ export class ReframingEngine {
   private frameTransforms: Map<number, FrameTransform> = new Map();
   private useMultiPointStabilization: boolean = false; // Disable for now
   private useTrajectorySmoothing: boolean = false; // Disable old trajectory smoothing
-  private useBezierSmoothing: boolean = true; // Use Bezier curve smoothing
+  private useBezierSmoothing: boolean = true; // Use sync point based Bezier smoothing (half-fps sync)
   private initialTargetBox?: { width: number; height: number };
   
   constructor(config: ReframingConfig, initialTargetBox?: { width: number; height: number }) {
@@ -159,7 +159,7 @@ export class ReframingEngine {
     
     // If using Bezier smoothing and we have a selected track
     if (this.useBezierSmoothing && selectedTrack) {
-      // console.log('Using Bezier curve smoothing for stable reframing');
+      console.log('Using adaptive smoothing with velocity prediction for stable reframing');
       
       // Get smoothed trajectory for the entire sequence
       const outputRatio = ASPECT_RATIOS[this.config.outputRatio];

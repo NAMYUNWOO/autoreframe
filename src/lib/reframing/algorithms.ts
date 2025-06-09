@@ -3,23 +3,24 @@ import { BoundingBox, FrameTransform, TrackedObject } from '@/types';
 export class SmoothingAlgorithm {
   private history: FrameTransform[] = [];
   private smoothingFactor: number;
-  private maxHistorySize: number = 60; // Increased for ByteTrack
+  private maxHistorySize: number = 45; // Balanced for stability
   private lastValidTransform: FrameTransform | null = null;
   private velocityHistory: { vx: number; vy: number; vs: number }[] = [];
-  private maxVelocity: number = 10; // Much lower for ByteTrack stability
-  private maxAcceleration: number = 2; // Much lower for ByteTrack stability
+  private maxVelocity: number = 15; // Moderate speed limit
+  private maxAcceleration: number = 5; // Moderate acceleration
   private useAggressiveSmoothing: boolean = false;
-  private medianFilterSize: number = 5; // For outlier rejection
+  private medianFilterSize: number = 5; // Standard outlier rejection
 
   constructor(smoothingFactor: number = 0.8, useAggressiveSmoothing: boolean = false) {
     this.smoothingFactor = smoothingFactor;
     this.useAggressiveSmoothing = useAggressiveSmoothing;
     
     if (useAggressiveSmoothing) {
-      this.maxHistorySize = 90; // Even more history for ByteTrack
-      this.maxVelocity = 5; // Very conservative movement
-      this.maxAcceleration = 1; // Very smooth acceleration
-      this.medianFilterSize = 7; // Stronger outlier rejection
+      // Balanced settings for smooth yet responsive tracking
+      this.maxHistorySize = 30; // Moderate history
+      this.maxVelocity = 20; // Allow reasonably fast movement
+      this.maxAcceleration = 8; // Smooth acceleration
+      this.medianFilterSize = 5; // Standard outlier rejection
     }
   }
 
@@ -121,21 +122,21 @@ export class SmoothingAlgorithm {
       }
     }
     
-    // Apply Kalman-filter-like smoothing
-    const windowSize = this.useAggressiveSmoothing ? Math.min(60, this.history.length) : Math.min(20, this.history.length);
+    // Apply stronger smoothing for stability
+    const windowSize = this.useAggressiveSmoothing ? Math.min(40, this.history.length) : Math.min(20, this.history.length);
     
     if (this.useAggressiveSmoothing) {
-      // Use Gaussian weighted average for ByteTrack
+      // Stronger smoothing with Gaussian weights
       let smoothedX = 0, smoothedY = 0, smoothedScale = 0;
       let totalWeight = 0;
       
-      const sigma = windowSize / 3; // Standard deviation for Gaussian
+      const sigma = windowSize / 3; // Wider spread for smoother results
       
       for (let i = 0; i < windowSize; i++) {
         const idx = this.history.length - windowSize + i;
         const transform = this.history[idx];
         
-        // Gaussian weight
+        // Gaussian weight with moderate spread
         const distance = windowSize - i - 1;
         const weight = Math.exp(-(distance * distance) / (2 * sigma * sigma));
         

@@ -44,8 +44,8 @@ export const detectionConfig = {
     // Model confidence threshold
     confidenceThreshold: 0.3,
     
-    // NMS IoU threshold
-    iouThreshold: 0.45,
+    // NMS IoU threshold (lower = more aggressive duplicate removal)
+    iouThreshold: 0.3,
     
     // Maximum detections per frame
     maxDetections: 100

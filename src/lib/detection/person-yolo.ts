@@ -282,7 +282,16 @@ export class PersonYOLODetector {
     squeezedPredictions.dispose();
     confidences.dispose();
     
-    return boxes;
+    // Apply NMS to remove duplicate detections
+    // This is crucial to prevent the same person from being detected multiple times
+    const nmsBoxes = this.nonMaxSuppression(boxes);
+    
+    // Log if duplicates were removed
+    // if (boxes.length > nmsBoxes.length) {
+    //   console.log(`NMS removed ${boxes.length - nmsBoxes.length} duplicate detections`);
+    // }
+    
+    return nmsBoxes;
   }
 
   private nonMaxSuppression(boxes: BoundingBox[]): BoundingBox[] {

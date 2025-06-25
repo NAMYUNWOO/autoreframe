@@ -41,6 +41,7 @@ export function useObjectDetection() {
   useEffect(() => {
     const initDetector = async () => {
       try {
+        console.log('Initializing PersonYOLODetector...');
         detectorRef.current = new PersonYOLODetector();
         await detectorRef.current.initialize();
         
@@ -51,12 +52,16 @@ export function useObjectDetection() {
         if (useHeadDetection) {
           headDetectorRef.current = new HeadDetector();
           await headDetectorRef.current.initialize();
-          // console.log('Head detector initialized');
+          console.log('Head detector initialized');
         }
         
         setIsModelLoaded(true);
+        console.log('Model loaded successfully!');
       } catch (error) {
-        // console.error('Failed to initialize detectors:', error);
+        console.error('Failed to initialize detectors:', error);
+        if (error instanceof Error) {
+          console.error('Error details:', error.stack);
+        }
         setIsModelLoaded(false);
       }
     };

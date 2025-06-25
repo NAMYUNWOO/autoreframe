@@ -31,7 +31,7 @@ npm run lint       # Run ESLint for code linting
 
 ### Key Components
 - **Hooks**: Core logic in `useVideoProcessor`, `useObjectDetection`, `useReframing`
-- **Detection**: YOLOv8n model (`public/yolov8n_web_model/`) detects 80 COCO classes
+- **Detection**: YOLOv12n model (`public/yolov12n_web_model/`) detects 80 COCO classes
 - **Tracking**: ByteTrack provides consistent object IDs across frames
 - **Reframing**: Bezier curve interpolation for smooth camera movements
 - **Export**: FFmpeg.js handles video encoding with multiple format options

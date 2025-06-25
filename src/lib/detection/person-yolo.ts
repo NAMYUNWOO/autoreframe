@@ -3,7 +3,7 @@ import { BoundingBox } from '@/types';
 
 export class PersonYOLODetector {
   private model: tf.GraphModel | null = null;
-  private modelPath: string = '/yolov8n_web_model/model.json';
+  private modelPath: string = '/yolov12n_web_model/model.json';
   private inputSize: number = 640;
   private confidenceThreshold: number = 0.3; // 30% default confidence threshold for better detection
   
@@ -31,18 +31,52 @@ export class PersonYOLODetector {
   async initialize(): Promise<void> {
     try {
       await tf.ready();
-      // console.log('Loading YOLOv8n model from:', this.modelPath);
+      console.log('Loading YOLOv12n model from:', this.modelPath);
+      console.log('TensorFlow.js version:', tf.version.tfjs);
+      
+      // Try to fetch the model.json first to verify it's accessible
+      try {
+        const response = await fetch(this.modelPath);
+        console.log('Model fetch response status:', response.status);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch model: ${response.status} ${response.statusText}`);
+        }
+      } catch (fetchError) {
+        console.error('Failed to fetch model.json:', fetchError);
+        throw fetchError;
+      }
+      
       this.model = await tf.loadGraphModel(this.modelPath);
-      // console.log('YOLOv8n person detection model initialized successfully');
+      console.log('YOLOv12n person detection model initialized successfully');
       
       // Test the model with a dummy input to ensure it's working
       const testInput = tf.zeros([1, this.inputSize, this.inputSize, 3]);
-      const testOutput = await this.model.predict(testInput) as tf.Tensor;
-      // console.log('Model test output shape:', testOutput.shape);
+      
+      // Temporarily suppress the TensorFlow.js warning
+      const originalWarn = console.warn;
+      console.warn = (...args: any[]) => {
+        if (args[0]?.includes?.('model.execute()')) {
+          return;
+        }
+        originalWarn.apply(console, args);
+      };
+      
+      const testOutput = await this.model.executeAsync(testInput);
+      
+      // Restore original console.warn
+      console.warn = originalWarn;
+      
+      // Handle both single tensor and array outputs
+      if (Array.isArray(testOutput)) {
+        console.log('Model test output shape:', testOutput[0].shape);
+        testOutput.forEach(t => t.dispose());
+      } else {
+        console.log('Model test output shape:', testOutput.shape);
+        testOutput.dispose();
+      }
       testInput.dispose();
-      testOutput.dispose();
     } catch (error) {
-      // console.error('Failed to initialize YOLOv8n model:', error);
+      console.error('Failed to initialize YOLOv12n model:', error);
       throw error;
     }
   }
@@ -53,7 +87,33 @@ export class PersonYOLODetector {
     }
 
     const input = await this.preprocessImage(imageData);
-    const predictions = await this.model.predict(input) as tf.Tensor;
+    
+    // Temporarily suppress the TensorFlow.js warning about using execute() instead of executeAsync()
+    const originalWarn = console.warn;
+    console.warn = (...args: any[]) => {
+      if (args[0]?.includes?.('model.execute()')) {
+        return; // Suppress this specific warning
+      }
+      originalWarn.apply(console, args);
+    };
+    
+    const result = await this.model.executeAsync(input);
+    
+    // Restore original console.warn
+    console.warn = originalWarn;
+    
+    // Handle both single tensor and array outputs (YOLOv12n returns array)
+    let predictions: tf.Tensor;
+    if (Array.isArray(result)) {
+      predictions = result[0] as tf.Tensor;
+      // Dispose other outputs if any
+      for (let i = 1; i < result.length; i++) {
+        result[i].dispose();
+      }
+    } else {
+      predictions = result as tf.Tensor;
+    }
+    
     const boxes = await this.postprocess(predictions, imageData, frameNumber);
     
     // Clean up tensors
@@ -94,118 +154,42 @@ export class PersonYOLODetector {
       ? [originalImage.height, originalImage.width]
       : [originalImage.height, originalImage.width];
     
-    const isFrame213 = frameNumber === 213;
-    if (isFrame213) {
-      // console.log('Frame 213: YOLOv8 predictions shape:', predictions.shape);
-    }
-    
-    // YOLOv8 outputs can be in different formats
-    // Common formats: [1, 84, 8400] or [1, 8400, 84]
-    let data: Float32Array;
-    let numBoxes: number;
-    let stride: number;
-    let isTransposed = false;
-    
-    if (predictions.shape[1] === 84 && predictions.shape[2] === 8400) {
-      // Format: [1, 84, 8400] - need to transpose
-      if (isFrame213) {
-        // console.log('Frame 213: Transposing YOLOv8 output from [1, 84, 8400] to [1, 8400, 84]');
-      }
-      const transposed = predictions.transpose([0, 2, 1]);
-      data = await transposed.data() as Float32Array;
-      transposed.dispose();
-      numBoxes = 8400;
-      stride = 84;
-      isTransposed = true;
-    } else {
-      // Format: [1, 8400, 84] or similar
-      data = await predictions.data() as Float32Array;
-      numBoxes = predictions.shape[1] as number;
-      stride = predictions.shape[2] as number;
-    }
-    
-    if (isFrame213) {
-      // console.log(`Frame 213: Processing ${numBoxes} boxes with stride ${stride}`);
-    }
+    // This YOLOv12n model outputs [1, 300, 6] with NMS already applied
+    // Format: [x1, y1, x2, y2, confidence, class]
+    const data = await predictions.arraySync() as number[][][];
+    const detections = data[0]; // Remove batch dimension
     
     const boxes: BoundingBox[] = [];
-    let debugMaxScore = 0;
-    let debugScoreCount = 0;
     
     // Process each detection
-    for (let i = 0; i < numBoxes; i++) {
-      const offset = i * stride;
+    for (const bbox of detections) {
+      const x1 = bbox[0];
+      const y1 = bbox[1];
+      const x2 = bbox[2];
+      const y2 = bbox[3];
+      const score = bbox[4];
+      const classId = bbox[5];
       
-      // YOLOv8 format: first 4 values are bbox (cx, cy, w, h), then 80 class scores
-      const cx = data[offset];
-      const cy = data[offset + 1];
-      const w = data[offset + 2];
-      const h = data[offset + 3];
-      
-      // Find best class
-      let maxScore = 0;
-      let maxClassIdx = -1;
-      
-      for (let c = 0; c < 80; c++) {
-        const score = data[offset + 4 + c];
-        if (score > maxScore) {
-          maxScore = score;
-          maxClassIdx = c;
-        }
-      }
-      
-      // Track max score for debugging
-      if (maxScore > debugMaxScore) {
-        debugMaxScore = maxScore;
-      }
-      if (maxScore > 0.01) {
-        debugScoreCount++;
-      }
-      
-      // Only keep person detections (class 0) with confidence
-      // Debug: Log ALL person detections regardless of threshold
-      if (maxClassIdx === 0 && isFrame213) {
-        // console.log(`Frame 213 - Person detection: score=${maxScore.toFixed(3)}, threshold=${this.confidenceThreshold}, passes=${maxScore > this.confidenceThreshold}`);
-      }
-      
-      // Check if score seems to be in percentage form (0-100) rather than decimal (0-1)
-      // YOLOv8 should output scores in 0-1 range, but let's verify
-      if (maxClassIdx === 0 && maxScore > this.confidenceThreshold) {
-        // YOLOv8 coordinates are already in pixel space (640x640)
-        // Need to scale to original image size
+      // Filter by confidence threshold and only keep person detections (class 0)
+      if (score > this.confidenceThreshold && classId === 0) {
+        // Scale coordinates from model input size to original image size
         const scaleX = width / this.inputSize;
         const scaleY = height / this.inputSize;
         
-        const x1 = (cx - w / 2) * scaleX;
-        const y1 = (cy - h / 2) * scaleY;
-        const boxWidth = w * scaleX;
-        const boxHeight = h * scaleY;
-        
         boxes.push({
-          x: Math.max(0, x1),
-          y: Math.max(0, y1),
-          width: Math.min(boxWidth, width - x1),
-          height: Math.min(boxHeight, height - y1),
-          confidence: maxScore,
+          x: Math.max(0, x1 * scaleX),
+          y: Math.max(0, y1 * scaleY),
+          width: Math.min((x2 - x1) * scaleX, width - x1 * scaleX),
+          height: Math.min((y2 - y1) * scaleY, height - y1 * scaleY),
+          confidence: score,
           class: 'person',
           classId: 0
         });
       }
     }
     
-    if (isFrame213) {
-      // console.log(`Frame 213: Found ${boxes.length} person detections before NMS`);
-      // console.log(`Frame 213: Max score seen: ${debugMaxScore.toFixed(3)}, boxes with score > 0.01: ${debugScoreCount}`);
-      // console.log(`Frame 213: Current confidence threshold: ${this.confidenceThreshold}`);
-    }
-    
-    // Apply NMS
-    const nmsBoxes = this.nonMaxSuppression(boxes);
-    if (isFrame213) {
-      // console.log(`Frame 213: ${nmsBoxes.length} person detections after NMS`);
-    }
-    
-    return nmsBoxes;
+    // NMS is already applied by the model, so we don't need to apply it again
+    return boxes;
   }
 
   private nonMaxSuppression(boxes: BoundingBox[]): BoundingBox[] {

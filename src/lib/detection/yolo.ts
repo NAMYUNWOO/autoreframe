@@ -22,7 +22,7 @@ export class YOLODetector {
   private iouThreshold: number = 0.5;
   private maxDetections: number = 100;
 
-  constructor(modelPath: string = '/yolov8n_web_model/model.json') {
+  constructor(modelPath: string = '/yolov12n_web_model/model.json') {
     this.modelPath = modelPath;
   }
 
@@ -50,7 +50,7 @@ export class YOLODetector {
     }
 
     const input = await this.preprocessImage(imageData);
-    const predictions = await this.model.predict(input) as tf.Tensor;
+    const predictions = await this.model.executeAsync(input) as tf.Tensor;
     const boxes = await this.postprocess(predictions, imageData);
     
     input.dispose();

@@ -11,7 +11,7 @@ export enum TrackState {
 export class STrack {
   private static _count = 0;
   
-  trackId: number;
+  trackId: number = 0;
   isActivated: boolean = false;
   state: TrackState = TrackState.New;
   

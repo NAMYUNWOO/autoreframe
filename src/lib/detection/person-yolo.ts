@@ -205,16 +205,15 @@ export class PersonYOLODetector {
       : [originalImage.height, originalImage.width];
     
     // Try the reference implementation approach using tensor operations
-    return tf.tidy(() => {
-      // Remove batch dimension
-      const squeezedPredictions = predictions.squeeze([0]); // Shape: [300, 6]
-      
-      // Extract confidence scores (index 4)
-      const confidences = squeezedPredictions.slice([0, 4], [-1, 1]).squeeze(); // Shape: [300]
-      
-      // Get the data synchronously for processing
-      const predictionsData = squeezedPredictions.arraySync() as number[][];
-      let confidenceData = confidences.dataSync() as Float32Array;
+    // Remove batch dimension
+    const squeezedPredictions = predictions.squeeze([0]); // Shape: [300, 6]
+    
+    // Extract confidence scores (index 4)
+    const confidences = squeezedPredictions.slice([0, 4], [-1, 1]).squeeze(); // Shape: [300]
+    
+    // Get the data synchronously for processing
+    const predictionsData = squeezedPredictions.arraySync() as number[][];
+    let confidenceData = confidences.dataSync() as Float32Array;
       
       // YOLOv12n might output confidence values in a separate tensor
       // Check this regardless of platform for consistency
@@ -233,7 +232,7 @@ export class PersonYOLODetector {
       }
       
       // Create mask for detections above threshold
-      const mask = confidenceData.map(c => c > this.confidenceThreshold);
+      const mask = Array.from(confidenceData).map(c => c > this.confidenceThreshold);
       
       
       const boxes: BoundingBox[] = [];
@@ -279,12 +278,11 @@ export class PersonYOLODetector {
       }
       
       
-      // Clean up tensors
-      squeezedPredictions.dispose();
-      confidences.dispose();
-      
-      return boxes;
-    });
+    // Clean up tensors
+    squeezedPredictions.dispose();
+    confidences.dispose();
+    
+    return boxes;
   }
 
   private nonMaxSuppression(boxes: BoundingBox[]): BoundingBox[] {

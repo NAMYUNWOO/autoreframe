@@ -287,10 +287,9 @@ export function VideoPlayer({
   return (
     <div className="w-full">
       <div 
-        className="relative bg-black rounded-xl overflow-hidden" 
+        className="relative bg-black rounded-xl overflow-hidden max-h-[70vh] md:max-h-[calc(100vh-300px)] min-h-[200px] md:min-h-[300px]" 
         style={{ 
-          aspectRatio: metadata ? `${metadata.width}/${metadata.height}` : '16/9',
-          maxHeight: 'calc(100vh - 300px)'
+          aspectRatio: metadata ? `${metadata.width}/${metadata.height}` : '16/9'
         }}
       >
         <div ref={containerRef} className="absolute inset-0" />

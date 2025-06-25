@@ -542,9 +542,8 @@ export function HeadSelector({
       )}
 
       <div 
-        className="relative mb-4 bg-black rounded-lg overflow-hidden flex items-center justify-center"
+        className="relative mb-4 bg-black rounded-lg overflow-hidden flex items-center justify-center max-h-[60vh] md:max-h-[calc(100vh-600px)] min-h-[200px] md:min-h-[300px]"
         style={{ 
-          maxHeight: 'calc(100vh - 600px)',
           aspectRatio: videoElement ? `${videoElement.videoWidth}/${videoElement.videoHeight}` : '16/9'
         }}
       >

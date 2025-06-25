@@ -286,17 +286,20 @@ export function VideoPlayer({
 
   return (
     <div className="w-full">
-      <div 
-        className="relative bg-black rounded-xl overflow-hidden max-h-[70vh] md:max-h-[calc(100vh-300px)] min-h-[200px] md:min-h-[300px]" 
-        style={{ 
-          aspectRatio: metadata ? `${metadata.width}/${metadata.height}` : '16/9'
-        }}
-      >
-        <div ref={containerRef} className="absolute inset-0" />
-        <canvas
-          ref={overlayCanvasRef}
-          className="absolute inset-0 w-full h-full object-contain pointer-events-none"
-        />
+      <div className="w-full flex justify-center">
+        <div 
+          className="relative bg-black rounded-xl overflow-hidden w-full max-h-[70vh] md:max-h-[calc(100vh-300px)]" 
+          style={{ 
+            aspectRatio: metadata ? `${metadata.width}/${metadata.height}` : '16/9',
+            maxWidth: '100%'
+          }}
+        >
+          <div ref={containerRef} className="absolute inset-0" />
+          <canvas
+            ref={overlayCanvasRef}
+            className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+          />
+        </div>
       </div>
       
       <div className="mt-4">

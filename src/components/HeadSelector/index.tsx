@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Detection, BoundingBox, ReframingConfig } from '@/types';
 import { REFRAMING_PRESETS } from '@/lib/reframing/presets';
+import { isDevelopment } from '@/lib/utils/env';
 
 interface HeadSelectorProps {
   videoElement: HTMLVideoElement | null;
@@ -10,6 +11,7 @@ interface HeadSelectorProps {
   onConfirm: (reframingConfig?: ReframingConfig) => void;
   confidenceThreshold?: number;
   onConfidenceChange?: (value: number) => void;
+  onGetDetectionInfo?: () => void;
 }
 
 export function HeadSelector({ 
@@ -17,7 +19,8 @@ export function HeadSelector({
   onSelectHead, 
   onConfirm, 
   confidenceThreshold = 0.3,
-  onConfidenceChange
+  onConfidenceChange,
+  onGetDetectionInfo
 }: HeadSelectorProps) {
   const [detections, setDetections] = useState<BoundingBox[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -150,31 +153,69 @@ export function HeadSelector({
       videoElement.onseeked = () => resolve(null);
     });
 
-    // Set canvas size
-    canvas.width = videoElement.videoWidth;
-    canvas.height = videoElement.videoHeight;
+    // Set canvas size - optimize for mobile
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    let canvasWidth = videoElement.videoWidth;
+    let canvasHeight = videoElement.videoHeight;
+    
+    // For mobile, limit canvas size to reduce memory usage
+    if (isMobile && (canvasWidth > 1920 || canvasHeight > 1920)) {
+      const scale = Math.min(1920 / canvasWidth, 1920 / canvasHeight);
+      canvasWidth = Math.floor(canvasWidth * scale);
+      canvasHeight = Math.floor(canvasHeight * scale);
+      console.log(`Mobile: Scaling canvas from ${videoElement.videoWidth}x${videoElement.videoHeight} to ${canvasWidth}x${canvasHeight}`);
+    }
+    
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
     overlayCanvas.width = videoElement.videoWidth;
     overlayCanvas.height = videoElement.videoHeight;
 
     // Draw first frame
-    ctx.drawImage(videoElement, 0, 0);
-    // console.log('Canvas size:', canvas.width, 'x', canvas.height);
+    ctx.drawImage(videoElement, 0, 0, canvasWidth, canvasHeight);
+    console.log('Canvas size:', canvas.width, 'x', canvas.height, 'Mobile:', isMobile);
+    
+    // Debug: Check if canvas has actual content
+    if (isMobile) {
+      const imageData = ctx.getImageData(0, 0, Math.min(10, canvas.width), Math.min(10, canvas.height));
+      const hasContent = imageData.data.some((pixel, i) => i % 4 !== 3 && pixel !== 0);
+      console.log('Canvas has content:', hasContent);
+      
+      // Try to save canvas as image for debugging
+      try {
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+        console.log('Canvas data URL length:', dataUrl.length);
+      } catch (e) {
+        console.error('Cannot convert canvas to data URL:', e);
+      }
+    }
 
     // Import and run detection
     try {
+      // Show mobile-specific message
+      if (isMobile) {
+        setIsDetecting(true);
+        console.log('Mobile device detected - using optimized detection');
+      }
+      
       // console.log('Importing PersonYOLODetector...');
       const { PersonYOLODetector } = await import('@/lib/detection/person-yolo');
-      const detector = new PersonYOLODetector();
+      
+      // Use singleton on mobile to save memory
+      const detector = isMobile ? PersonYOLODetector.getInstance() : new PersonYOLODetector();
       
       // console.log('Initializing detector...');
       await detector.initialize();
       
       // Set a lower threshold for initial detection to ensure we catch all persons
-      detector.setConfidenceThreshold(0.3);
+      // Even lower for mobile to debug - try extremely low value
+      detector.setConfidenceThreshold(isMobile ? 0.00001 : 0.3);
       
       // console.log('Running detection on first frame...');
+      // Always use canvas for detection to ensure consistency
       const personDetections = await detector.detect(canvas);
-      // console.log('Raw detections found:', personDetections.length);
+      
+      console.log('Raw detections found:', personDetections.length, 'on', isMobile ? 'mobile' : 'desktop');
       
       // Always use ByteTracker for consistency
       // console.log('Applying ByteTracker...');
@@ -278,7 +319,11 @@ export function HeadSelector({
         }
       
       setDetections(finalDetections);
-      detector.dispose();
+      
+      // Don't dispose on mobile if using singleton
+      if (!isMobile) {
+        detector.dispose();
+      }
 
       // Draw detections
       if (finalDetections.length > 0) {
@@ -287,11 +332,23 @@ export function HeadSelector({
         // console.warn('No persons detected in the first frame');
       }
     } catch (error) {
-      // console.error('Failed to detect persons:', error);
-      if (error instanceof Error) {
-        alert(`Failed to detect persons: ${error.message}`);
+      console.error('Failed to detect persons:', error);
+      
+      // Provide mobile-specific error messages
+      if (isMobile) {
+        if (error instanceof Error && error.message.includes('WebGL')) {
+          alert('WebGL is not supported on this mobile browser. Please try using Chrome or Safari.');
+        } else if (error instanceof Error && error.message.includes('memory')) {
+          alert('Not enough memory to run detection. Please try with a smaller video or close other apps.');
+        } else {
+          alert(`Mobile detection error: ${error instanceof Error ? error.message : 'Unknown error'}. Please ensure you have enough free memory and try again.`);
+        }
       } else {
-        alert('Failed to detect persons in the first frame. Please try a different video or ensure there are visible people in the first frame.');
+        if (error instanceof Error) {
+          alert(`Failed to detect persons: ${error.message}`);
+        } else {
+          alert('Failed to detect persons in the first frame. Please try a different video or ensure there are visible people in the first frame.');
+        }
       }
     } finally {
       setIsDetecting(false);
@@ -541,12 +598,14 @@ export function HeadSelector({
         </div>
       )}
 
-      <div 
-        className="relative mb-4 bg-black rounded-lg overflow-hidden flex items-center justify-center max-h-[60vh] md:max-h-[calc(100vh-600px)] min-h-[200px] md:min-h-[300px]"
-        style={{ 
-          aspectRatio: videoElement ? `${videoElement.videoWidth}/${videoElement.videoHeight}` : '16/9'
-        }}
-      >
+      <div className="w-full flex justify-center mb-4">
+        <div 
+          className="relative bg-black rounded-lg overflow-hidden w-full max-h-[60vh] md:max-h-[calc(100vh-600px)]"
+          style={{ 
+            aspectRatio: videoElement ? `${videoElement.videoWidth}/${videoElement.videoHeight}` : '16/9',
+            maxWidth: '100%'
+          }}
+        >
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full"
@@ -588,6 +647,7 @@ export function HeadSelector({
             </div>
           </div>
         )}
+        </div>
       </div>
 
       {/* Selection Status */}
@@ -714,6 +774,17 @@ export function HeadSelector({
          activeTab !== 'reframe' ? 'Configure Reframe Settings First' :
          'Confirm Selection & Start Detection'}
       </button>
+      
+      {/* Dev-only button for detection info */}
+      {isDevelopment() && onGetDetectionInfo && (
+        <button
+          onClick={onGetDetectionInfo}
+          className="w-full py-3 px-4 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-medium rounded-lg
+                     hover:from-yellow-600 hover:to-orange-600 transition-all transform hover:scale-[1.02] mt-2"
+        >
+          Get Detection Info (Dev)
+        </button>
+      )}
     </div>
   );
 }

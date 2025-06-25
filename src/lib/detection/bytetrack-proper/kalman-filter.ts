@@ -1,235 +1,283 @@
+/**
+ * Kalman Filter implementation for object tracking
+ * Optimized for 5-frame sampling intervals
+ */
 export class KalmanFilter {
-  private _motion_mat: number[][];
-  private _update_mat: number[][];
-  private _std_weight_position: number;
-  private _std_weight_velocity: number;
-
+  private _motionMat: number[][];
+  private _updateMat: number[][];
+  private _stdWeightPosition: number;
+  private _stdWeightVelocity: number;
+  
   constructor() {
-    // Motion matrix (F)
-    this._motion_mat = [
-      [1, 0, 0, 0, 1, 0, 0, 0],
-      [0, 1, 0, 0, 0, 1, 0, 0],
-      [0, 0, 1, 0, 0, 0, 1, 0],
-      [0, 0, 0, 1, 0, 0, 0, 1],
-      [0, 0, 0, 0, 1, 0, 0, 0],
-      [0, 0, 0, 0, 0, 1, 0, 0],
-      [0, 0, 0, 0, 0, 0, 1, 0],
-      [0, 0, 0, 0, 0, 0, 0, 1]
-    ];
-
-    // Measurement matrix (H)
-    this._update_mat = [
-      [1, 0, 0, 0, 0, 0, 0, 0],
-      [0, 1, 0, 0, 0, 0, 0, 0],
-      [0, 0, 1, 0, 0, 0, 0, 0],
-      [0, 0, 0, 1, 0, 0, 0, 0]
-    ];
-
-    this._std_weight_position = 1.0 / 20;
-    this._std_weight_velocity = 1.0 / 160;
+    // State dimension: [cx, cy, s, h, vx, vy, vs, vh]
+    // where cx,cy = center position, s = aspect ratio, h = height
+    // vx,vy,vs,vh = velocities
+    const ndim = 4;
+    const dt = 1.0;
+    
+    // Create motion matrix
+    this._motionMat = this.eye(2 * ndim, 2 * ndim);
+    for (let i = 0; i < ndim; i++) {
+      this._motionMat[i][ndim + i] = dt;
+    }
+    
+    // Create update matrix
+    this._updateMat = this.eye(ndim, 2 * ndim);
+    
+    // Motion and observation uncertainty weights
+    // Adjusted for 5-frame intervals
+    this._stdWeightPosition = 1.0 / 20.0;
+    this._stdWeightVelocity = 1.0 / 160.0;
   }
-
+  
   /**
-   * Initialize track from bounding box.
-   * State: [x, y, a, h, vx, vy, va, vh]
-   * where x,y is center position, a is aspect ratio, h is height
+   * Initialize a new track
+   * @param measurement [cx, cy, a, h] where a is aspect ratio
+   * @returns [mean, covariance]
    */
   initiate(measurement: number[]): [number[], number[][]] {
-    const [x1, y1, x2, y2] = measurement;
-    const cx = (x1 + x2) / 2;
-    const cy = (y1 + y2) / 2;
-    const w = x2 - x1;
-    const h = y2 - y1;
-    const a = w / h;
-
-    const mean = [cx, cy, a, h, 0, 0, 0, 0];
+    const meanPos = measurement;
+    const meanVel = [0, 0, 0, 0];
+    const mean = [...meanPos, ...meanVel];
     
-    // Initialize covariance
     const std = [
-      2 * this._std_weight_position * h,
-      2 * this._std_weight_position * h,
+      2 * this._stdWeightPosition * measurement[3],
+      2 * this._stdWeightPosition * measurement[3],
       1e-2,
-      2 * this._std_weight_position * h,
-      10 * this._std_weight_velocity * h,
-      10 * this._std_weight_velocity * h,
+      2 * this._stdWeightPosition * measurement[3],
+      10 * this._stdWeightVelocity * measurement[3],
+      10 * this._stdWeightVelocity * measurement[3],
       1e-5,
-      10 * this._std_weight_velocity * h
+      10 * this._stdWeightVelocity * measurement[3]
     ];
-
+    
     const covariance = this.diag(std.map(s => s * s));
+    
     return [mean, covariance];
   }
-
+  
   /**
    * Predict next state
+   * @param mean Current mean state
+   * @param covariance Current covariance
+   * @returns [predicted mean, predicted covariance]
    */
   predict(mean: number[], covariance: number[][]): [number[], number[][]] {
-    // State prediction: x' = F * x
-    const predicted_mean = this.matmul(this._motion_mat, mean) as number[];
-    
-    // Covariance prediction: P' = F * P * F^T + Q
-    const temp = this.matmul(this._motion_mat, covariance) as number[][];
-    const predicted_covariance = this.matmul(temp, this.transpose(this._motion_mat)) as number[][];
-    
-    // Add process noise
     const std = [
-      this._std_weight_position * predicted_mean[3],
-      this._std_weight_position * predicted_mean[3],
+      this._stdWeightPosition * mean[3],
+      this._stdWeightPosition * mean[3],
       1e-2,
-      this._std_weight_position * predicted_mean[3],
-      this._std_weight_velocity * predicted_mean[3],
-      this._std_weight_velocity * predicted_mean[3],
+      this._stdWeightPosition * mean[3],
+      this._stdWeightVelocity * mean[3],
+      this._stdWeightVelocity * mean[3],
       1e-5,
-      this._std_weight_velocity * predicted_mean[3]
+      this._stdWeightVelocity * mean[3]
     ];
     
-    const Q = this.diag(std.map(s => s * s));
-    for (let i = 0; i < 8; i++) {
-      predicted_covariance[i][i] += Q[i][i];
-    }
-
-    return [predicted_mean, predicted_covariance];
+    const motionCov = this.diag(std.map(s => s * s));
+    
+    const predictedMean = this.matmul(this._motionMat, mean);
+    const predictedCovariance = this.add(
+      this.matmul(this.matmul(this._motionMat, covariance), this.transpose(this._motionMat)),
+      motionCov
+    );
+    
+    return [predictedMean, predictedCovariance];
   }
-
+  
   /**
-   * Update state with measurement
+   * Update state with new measurement
+   * @param mean Predicted mean
+   * @param covariance Predicted covariance
+   * @param measurement New measurement [cx, cy, a, h]
+   * @returns [updated mean, updated covariance]
    */
   update(mean: number[], covariance: number[][], measurement: number[]): [number[], number[][]] {
-    const [x1, y1, x2, y2] = measurement;
-    const cx = (x1 + x2) / 2;
-    const cy = (y1 + y2) / 2;
-    const w = x2 - x1;
-    const h = y2 - y1;
-    const a = w / h;
-
-    const meas = [cx, cy, a, h];
+    const projectedMean = this.matmul(this._updateMat, mean);
+    const projectedCov = this.matmul(
+      this.matmul(this._updateMat, covariance),
+      this.transpose(this._updateMat)
+    );
     
-    // Innovation: y = z - H * x
-    const predicted_meas = this.matmul(this._update_mat, mean) as number[];
-    const innovation = meas.map((m, i) => m - predicted_meas[i]);
-    
-    // Innovation covariance: S = H * P * H^T + R
-    const temp = this.matmul(this._update_mat, covariance) as number[][];
-    const S = this.matmul(temp, this.transpose(this._update_mat)) as number[][];
-    
-    // Add measurement noise
     const std = [
-      this._std_weight_position * mean[3],
-      this._std_weight_position * mean[3],
+      this._stdWeightPosition * mean[3],
+      this._stdWeightPosition * mean[3],
       1e-1,
-      this._std_weight_position * mean[3]
+      this._stdWeightPosition * mean[3]
     ];
     
-    for (let i = 0; i < 4; i++) {
-      S[i][i] += std[i] * std[i];
-    }
+    const innovationCov = this.add(
+      projectedCov,
+      this.diag(std.map(s => s * s))
+    );
     
-    // Kalman gain: K = P * H^T * S^-1
-    const temp2 = this.matmul(covariance, this.transpose(this._update_mat)) as number[][];
-    const K = this.matmul(temp2, this.inverse(S)) as number[][];
+    const choleskyCov = this.cholesky(innovationCov);
+    const kalmanGain = this.matmul(
+      this.matmul(covariance, this.transpose(this._updateMat)),
+      this.choleskyInverse(choleskyCov)
+    );
     
-    // State update: x = x + K * y
-    const state_update = this.matmul(K, innovation) as number[];
-    const updated_mean = mean.map((m, i) => m + state_update[i]);
+    const innovation = this.subtract(measurement, projectedMean);
+    const updatedMean = this.add(mean, this.matmul(kalmanGain, innovation));
+    const updatedCovariance = this.subtract(
+      covariance,
+      this.matmul(this.matmul(kalmanGain, innovationCov), this.transpose(kalmanGain))
+    );
     
-    // Covariance update: P = (I - K * H) * P
-    const I = this.eye(8);
-    const temp3 = this.matmul(K, this._update_mat) as number[][];
-    const I_KH = this.subtract(I, temp3);
-    const updated_covariance = this.matmul(I_KH, covariance) as number[][];
-
-    return [updated_mean, updated_covariance];
+    return [updatedMean, updatedCovariance];
   }
-
-  /**
-   * Convert state to bounding box
-   */
-  stateToBbox(state: number[]): number[] {
-    const [cx, cy, a, h] = state;
-    const w = a * h;
-    return [cx - w/2, cy - h/2, cx + w/2, cy + h/2];
-  }
-
+  
   // Matrix operations
+  private eye(n: number, m?: number): number[][] {
+    m = m || n;
+    const mat = Array(n).fill(null).map(() => Array(m).fill(0));
+    const minDim = Math.min(n, m);
+    for (let i = 0; i < minDim; i++) {
+      mat[i][i] = 1;
+    }
+    return mat;
+  }
+  
   private diag(values: number[]): number[][] {
     const n = values.length;
-    const result: number[][] = Array(n).fill(0).map(() => Array(n).fill(0));
+    const mat = Array(n).fill(null).map(() => Array(n).fill(0));
     for (let i = 0; i < n; i++) {
-      result[i][i] = values[i];
+      mat[i][i] = values[i];
+    }
+    return mat;
+  }
+  
+  private transpose(mat: number[][]): number[][] {
+    const rows = mat.length;
+    const cols = mat[0].length;
+    const result = Array(cols).fill(null).map(() => Array(rows).fill(0));
+    for (let i = 0; i < rows; i++) {
+      for (let j = 0; j < cols; j++) {
+        result[j][i] = mat[i][j];
+      }
     }
     return result;
   }
-
-  private eye(n: number): number[][] {
-    const result: number[][] = Array(n).fill(0).map(() => Array(n).fill(0));
-    for (let i = 0; i < n; i++) {
-      result[i][i] = 1;
+  
+  private matmul(a: number[][] | number[], b: number[][] | number[]): any {
+    // Matrix-vector multiplication
+    if (Array.isArray(a[0]) && !Array.isArray(b[0])) {
+      const mat = a as number[][];
+      const vec = b as number[];
+      return mat.map(row => 
+        row.reduce((sum, val, i) => sum + val * vec[i], 0)
+      );
     }
-    return result;
-  }
-
-  private matmul(A: number[][], B: number[] | number[][]): number[] | number[][] {
-    if (!Array.isArray(B[0])) {
-      // Matrix-vector multiplication
-      const b = B as number[];
-      return A.map(row => row.reduce((sum, val, i) => sum + val * b[i], 0));
-    } else {
-      // Matrix-matrix multiplication
-      const b = B as number[][];
-      const result: number[][] = Array(A.length).fill(0).map(() => Array(b[0].length).fill(0));
-      for (let i = 0; i < A.length; i++) {
-        for (let j = 0; j < b[0].length; j++) {
-          for (let k = 0; k < A[0].length; k++) {
-            result[i][j] += A[i][k] * b[k][j];
+    
+    // Vector-matrix multiplication (treating vector as row vector)
+    if (!Array.isArray(a[0]) && Array.isArray(b[0])) {
+      const vec = a as number[];
+      const mat = b as number[][];
+      const result: number[] = [];
+      for (let j = 0; j < mat[0].length; j++) {
+        let sum = 0;
+        for (let i = 0; i < vec.length; i++) {
+          sum += vec[i] * mat[i][j];
+        }
+        result.push(sum);
+      }
+      return result;
+    }
+    
+    // Matrix-matrix multiplication
+    if (Array.isArray(a[0]) && Array.isArray(b[0])) {
+      const matA = a as number[][];
+      const matB = b as number[][];
+      const rowsA = matA.length;
+      const colsA = matA[0].length;
+      const colsB = matB[0].length;
+      
+      const result = Array(rowsA).fill(null).map(() => Array(colsB).fill(0));
+      
+      for (let i = 0; i < rowsA; i++) {
+        for (let j = 0; j < colsB; j++) {
+          for (let k = 0; k < colsA; k++) {
+            result[i][j] += matA[i][k] * matB[k][j];
           }
         }
       }
       return result;
     }
-  }
-
-  private transpose(A: number[][]): number[][] {
-    return A[0].map((_, i) => A.map(row => row[i]));
-  }
-
-  private subtract(A: number[][], B: number[][]): number[][] {
-    return A.map((row, i) => row.map((val, j) => val - B[i][j]));
-  }
-
-  private inverse(A: number[][]): number[][] {
-    // Simple 4x4 matrix inversion for measurement covariance
-    const n = A.length;
-    const augmented: number[][] = A.map((row, i) => [...row, ...Array(n).fill(0).map((_, j) => i === j ? 1 : 0)]);
     
-    // Gaussian elimination
+    throw new Error('Invalid matrix multiplication');
+  }
+  
+  private add(a: number[][] | number[], b: number[][] | number[]): any {
+    if (Array.isArray(a[0])) {
+      const matA = a as number[][];
+      const matB = b as number[][];
+      return matA.map((row, i) => 
+        row.map((val, j) => val + matB[i][j])
+      );
+    } else {
+      const vecA = a as number[];
+      const vecB = b as number[];
+      return vecA.map((val, i) => val + vecB[i]);
+    }
+  }
+  
+  private subtract(a: number[] | number[][], b: number[] | number[][]): any {
+    if (Array.isArray(a[0])) {
+      const matA = a as number[][];
+      const matB = b as number[][];
+      return matA.map((row, i) => 
+        row.map((val, j) => val - matB[i][j])
+      );
+    } else {
+      const vecA = a as number[];
+      const vecB = b as number[];
+      return vecA.map((val, i) => val - vecB[i]);
+    }
+  }
+  
+  private cholesky(mat: number[][]): number[][] {
+    const n = mat.length;
+    const L = Array(n).fill(null).map(() => Array(n).fill(0));
+    
     for (let i = 0; i < n; i++) {
-      // Find pivot
-      let maxRow = i;
-      for (let k = i + 1; k < n; k++) {
-        if (Math.abs(augmented[k][i]) > Math.abs(augmented[maxRow][i])) {
-          maxRow = k;
+      for (let j = 0; j <= i; j++) {
+        let sum = 0;
+        for (let k = 0; k < j; k++) {
+          sum += L[i][k] * L[j][k];
         }
-      }
-      [augmented[i], augmented[maxRow]] = [augmented[maxRow], augmented[i]];
-      
-      // Make diagonal 1
-      const pivot = augmented[i][i];
-      for (let j = 0; j < 2 * n; j++) {
-        augmented[i][j] /= pivot;
-      }
-      
-      // Eliminate column
-      for (let k = 0; k < n; k++) {
-        if (k !== i) {
-          const factor = augmented[k][i];
-          for (let j = 0; j < 2 * n; j++) {
-            augmented[k][j] -= factor * augmented[i][j];
-          }
+        
+        if (i === j) {
+          L[i][j] = Math.sqrt(Math.max(mat[i][i] - sum, 1e-6));
+        } else {
+          L[i][j] = (mat[i][j] - sum) / L[j][j];
         }
       }
     }
     
-    // Extract inverse
-    return augmented.map(row => row.slice(n));
+    return L;
+  }
+  
+  private choleskyInverse(L: number[][]): number[][] {
+    const n = L.length;
+    const inv = Array(n).fill(null).map(() => Array(n).fill(0));
+    
+    // Forward substitution to solve L * Y = I
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (i === j) {
+          inv[i][j] = 1 / L[i][i];
+        } else if (i > j) {
+          let sum = 0;
+          for (let k = j; k < i; k++) {
+            sum += L[i][k] * inv[k][j];
+          }
+          inv[i][j] = -sum / L[i][i];
+        }
+      }
+    }
+    
+    // inv(L^T * L) = inv(L) * inv(L)^T
+    const result = this.matmul(this.transpose(inv), inv);
+    return result;
   }
 }

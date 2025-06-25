@@ -196,6 +196,20 @@ export default function Home() {
     handleDetection();
   }, [handleDetection, updateConfig]);
 
+  const handleGetDetectionInfo = useCallback(async () => {
+    if (!metadata) return;
+    
+    // Import the detection info collector
+    const { collectDetectionInfo } = await import('@/lib/debug/detectionInfoCollector');
+    
+    try {
+      await collectDetectionInfo(processFrames, metadata, confidenceThreshold);
+    } catch (error) {
+      console.error('Error collecting detection info:', error);
+      alert('Failed to collect detection info: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  }, [processFrames, metadata, confidenceThreshold]);
+
 
   const handleReset = useCallback(() => {
     resetVideo();
@@ -366,6 +380,7 @@ export default function Home() {
                   onConfirm={handleHeadSelectorConfirm}
                   confidenceThreshold={confidenceThreshold}
                   onConfidenceChange={handleConfidenceChange}
+                  onGetDetectionInfo={handleGetDetectionInfo}
                 />
               )}
 

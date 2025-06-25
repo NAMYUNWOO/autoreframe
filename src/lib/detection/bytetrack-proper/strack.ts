@@ -1,170 +1,193 @@
 import { KalmanFilter } from './kalman-filter';
-import { TrackState, Detection } from './types';
+import { Detection } from './types';
 
-let trackIdCount = 0;
+export enum TrackState {
+  New = 0,
+  Tracked = 1,
+  Lost = 2,
+  Removed = 3
+}
 
 export class STrack {
-  public trackId: number;
-  public isActivated: boolean;
-  public state: TrackState;
-  public score: number;
-  public class: string;
-  public headCenterX?: number;
-  public headCenterY?: number;
+  private static _count = 0;
   
-  private kalmanFilter: KalmanFilter;
-  private mean: number[];
-  private covariance: number[][];
-  public frameId: number;
-  private startFrame: number;
-  private trackletLen: number;
+  trackId: number;
+  isActivated: boolean = false;
+  state: TrackState = TrackState.New;
   
-  constructor() {
-    this.trackId = 0;
-    this.isActivated = false;
-    this.state = TrackState.New;
-    this.score = 0;
-    this.class = 'person';
-    
-    this.kalmanFilter = new KalmanFilter();
-    this.mean = [];
-    this.covariance = [];
-    this.frameId = 0;
-    this.startFrame = 0;
-    this.trackletLen = 0;
+  private _tlwh: number[] = [0, 0, 0, 0];
+  private kalmanFilter: KalmanFilter | null = null;
+  mean: number[] | null = null;
+  covariance: number[][] | null = null;
+  
+  score: number = 0;
+  frameId: number = 0;
+  startFrame: number = 0;
+  trackletLen: number = 0;
+  
+  // Additional properties
+  class: string = 'person';
+  headCenterX?: number;
+  headCenterY?: number;
+  
+  constructor(tlwh: number[], score: number) {
+    this._tlwh = [...tlwh];
+    this.score = score;
   }
-
-  /**
-   * Initialize track from detection
-   */
+  
   static fromDetection(det: Detection, frameId: number): STrack {
-    const track = new STrack();
-    track.activate(det, frameId);
+    // Convert tlbr to tlwh
+    const [x1, y1, x2, y2] = det.bbox;
+    const tlwh = [x1, y1, x2 - x1, y2 - y1];
+    
+    const track = new STrack(tlwh, det.score);
+    track.class = det.class || 'person';
+    track.headCenterX = det.headCenterX;
+    track.headCenterY = det.headCenterY;
+    track.frameId = frameId;
+    
     return track;
   }
-
-  /**
-   * Activate track with detection
-   */
-  activate(det: Detection, frameId: number): void {
-    [this.mean, this.covariance] = this.kalmanFilter.initiate(det.bbox);
+  
+  static resetId(): void {
+    STrack._count = 0;
+  }
+  
+  private static nextId(): number {
+    STrack._count += 1;
+    return STrack._count;
+  }
+  
+  activate(kalmanFilter: KalmanFilter, frameId: number): void {
+    this.kalmanFilter = kalmanFilter;
+    this.trackId = STrack.nextId();
+    
+    const measurement = this.tlwhToXyah(this._tlwh);
+    [this.mean, this.covariance] = this.kalmanFilter.initiate(measurement);
     
     this.trackletLen = 0;
     this.state = TrackState.Tracked;
     
-    if (frameId === 1) {
-      this.isActivated = true;
-    }
+    // Always activate for our use case (5-frame sampling)
+    this.isActivated = true;
     
     this.frameId = frameId;
     this.startFrame = frameId;
-    this.score = det.score;
-    this.class = det.class;
-    this.headCenterX = det.headCenterX;
-    this.headCenterY = det.headCenterY;
-    
-    if (this.trackId === 0) {
-      this.trackId = this.nextId();
-    }
   }
-
-  /**
-   * Re-activate a lost track
-   */
+  
   reActivate(det: Detection, frameId: number, newId: boolean = false): void {
-    [this.mean, this.covariance] = this.kalmanFilter.update(this.mean, this.covariance, det.bbox);
+    const [x1, y1, x2, y2] = det.bbox;
+    const tlwh = [x1, y1, x2 - x1, y2 - y1];
+    
+    const measurement = this.tlwhToXyah(tlwh);
+    [this.mean, this.covariance] = this.kalmanFilter!.update(
+      this.mean!,
+      this.covariance!,
+      measurement
+    );
     
     this.trackletLen = 0;
     this.state = TrackState.Tracked;
     this.isActivated = true;
     this.frameId = frameId;
-    this.score = det.score;
-    this.headCenterX = det.headCenterX;
-    this.headCenterY = det.headCenterY;
     
     if (newId) {
-      this.trackId = this.nextId();
+      this.trackId = STrack.nextId();
     }
+    
+    this.score = det.score;
+    this._tlwh = tlwh;
+    this.headCenterX = det.headCenterX;
+    this.headCenterY = det.headCenterY;
   }
-
-  /**
-   * Update track with new detection
-   */
+  
   update(det: Detection, frameId: number): void {
     this.frameId = frameId;
-    this.trackletLen++;
+    this.trackletLen += 1;
     
-    [this.mean, this.covariance] = this.kalmanFilter.update(this.mean, this.covariance, det.bbox);
+    const [x1, y1, x2, y2] = det.bbox;
+    const tlwh = [x1, y1, x2 - x1, y2 - y1];
+    
+    const measurement = this.tlwhToXyah(tlwh);
+    [this.mean, this.covariance] = this.kalmanFilter!.update(
+      this.mean!,
+      this.covariance!,
+      measurement
+    );
     
     this.state = TrackState.Tracked;
     this.isActivated = true;
     this.score = det.score;
+    this._tlwh = tlwh;
     this.headCenterX = det.headCenterX;
     this.headCenterY = det.headCenterY;
   }
-
-  /**
-   * Predict next state
-   */
+  
   predict(): void {
+    if (!this.mean || !this.covariance || !this.kalmanFilter) return;
+    
+    const meanState = [...this.mean];
     if (this.state !== TrackState.Tracked) {
-      this.mean[7] = 0; // Reset height velocity for lost tracks
+      meanState[7] = 0; // Zero velocity when not tracked
     }
     
-    [this.mean, this.covariance] = this.kalmanFilter.predict(this.mean, this.covariance);
+    [this.mean, this.covariance] = this.kalmanFilter.predict(
+      meanState,
+      this.covariance
+    );
   }
-
-  /**
-   * Mark track as lost
-   */
+  
   markLost(): void {
     this.state = TrackState.Lost;
   }
-
-  /**
-   * Mark track as removed
-   */
+  
   markRemoved(): void {
     this.state = TrackState.Removed;
   }
-
-  /**
-   * Get current bounding box
-   */
-  get tlbr(): number[] {
-    if (this.mean.length === 0) {
-      return [0, 0, 0, 0];
-    }
-    return this.kalmanFilter.stateToBbox(this.mean);
-  }
-
-  /**
-   * Get current position as tlwh format
-   */
+  
   get tlwh(): number[] {
-    const [x1, y1, x2, y2] = this.tlbr;
-    return [x1, y1, x2 - x1, y2 - y1];
+    if (!this.mean) {
+      return [...this._tlwh];
+    }
+    
+    const ret = this.mean.slice(0, 4);
+    ret[2] *= ret[3]; // width = aspect_ratio * height
+    ret[0] -= ret[2] / 2; // x = center_x - width/2
+    ret[1] -= ret[3] / 2; // y = center_y - height/2
+    
+    return ret;
   }
-
-  /**
-   * Static method to get next track ID
-   */
-  private nextId(): number {
-    trackIdCount += 1;
-    return trackIdCount;
+  
+  get tlbr(): number[] {
+    const ret = this.tlwh;
+    ret[2] += ret[0]; // x2 = x1 + width
+    ret[3] += ret[1]; // y2 = y1 + height
+    return ret;
   }
-
-  /**
-   * Reset track ID counter
-   */
-  static resetId(): void {
-    trackIdCount = 0;
+  
+  private tlwhToXyah(tlwh: number[]): number[] {
+    const ret = [...tlwh];
+    ret[0] += ret[2] / 2; // center_x = x + width/2
+    ret[1] += ret[3] / 2; // center_y = y + height/2
+    ret[2] /= ret[3]; // aspect_ratio = width/height
+    // ret[3] is height
+    return ret;
   }
-
-  /**
-   * Get track age (frames since start)
-   */
-  get age(): number {
-    return this.frameId - this.startFrame;
+  
+  clone(): STrack {
+    const cloned = new STrack(this._tlwh, this.score);
+    cloned.trackId = this.trackId;
+    cloned.isActivated = this.isActivated;
+    cloned.state = this.state;
+    cloned.kalmanFilter = this.kalmanFilter;
+    cloned.mean = this.mean ? [...this.mean] : null;
+    cloned.covariance = this.covariance ? this.covariance.map(row => [...row]) : null;
+    cloned.frameId = this.frameId;
+    cloned.startFrame = this.startFrame;
+    cloned.trackletLen = this.trackletLen;
+    cloned.class = this.class;
+    cloned.headCenterX = this.headCenterX;
+    cloned.headCenterY = this.headCenterY;
+    return cloned;
   }
 }

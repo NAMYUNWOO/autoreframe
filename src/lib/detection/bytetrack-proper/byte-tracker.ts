@@ -1,104 +1,67 @@
-import { STrack } from './strack';
-import { iouDistance, fuseScore, linearAssignment } from './matching';
-import { TrackState, Detection, TrackParams } from './types';
+import { KalmanFilter } from './kalman-filter';
+import { iouDistance, linearAssignment } from './matching';
+import { STrack, TrackState } from './strack';
 import { BoundingBox } from '@/types';
+import { TrackParams, Detection } from './types';
 
 export class ByteTracker {
   private trackedStracks: STrack[] = [];
   private lostStracks: STrack[] = [];
   private removedStracks: STrack[] = [];
   private frameId: number = 0;
+  private detectionFrameId: number = 0; // Actual frame number when detection runs
+  private kalmanFilter: KalmanFilter;
   private params: TrackParams;
+  private sampleInterval: number = 5; // We detect every 5 frames
   
   constructor(params: Partial<TrackParams> = {}) {
     this.params = {
-      trackThresh: params.trackThresh || 0.5,
-      trackBuffer: params.trackBuffer || 30,
-      matchThresh: params.matchThresh || 0.8,
-      minBoxArea: params.minBoxArea || 10,
-      lowThresh: params.lowThresh || 0.1
+      trackThresh: params.trackThresh ?? 0.3,
+      trackBuffer: params.trackBuffer ?? 30,
+      matchThresh: params.matchThresh ?? 0.5, // More lenient for 5-frame gaps
+      minBoxArea: params.minBoxArea ?? 100,
+      lowThresh: params.lowThresh ?? 0.1,
+      secondMatchThresh: params.secondMatchThresh ?? 0.5,
+      unconfirmedMatchThresh: params.unconfirmedMatchThresh ?? 0.7,
+      maxTimeLost: params.maxTimeLost ?? 30
     };
     
-    // console.log('ByteTracker initialized with params:', this.params);
-    
+    this.kalmanFilter = new KalmanFilter();
     STrack.resetId();
   }
-
+  
   /**
    * Update tracker with new detections
+   * @param boxes Detection boxes from YOLO
+   * @param frameNumber Actual frame number in video
+   * @returns Tracked boxes with IDs
    */
-  update(boxes: BoundingBox[], frameNumber?: number): BoundingBox[] {
+  update(boxes: BoundingBox[], frameNumber: number): BoundingBox[] {
     this.frameId++;
-    
-    if (frameNumber && frameNumber >= 210 && frameNumber <= 214) {
-      // console.log(`Frame ${frameNumber}: ByteTracker.update - frameId=${this.frameId}, input boxes: ${boxes.length}`);
-      if (frameNumber === 213) {
-        boxes.forEach((box, i) => {
-          // console.log(`  Frame 213 - Input box ${i}: confidence=${box.confidence.toFixed(3)}, class=${box.class}`);
-        });
-      }
-    }
+    this.detectionFrameId = frameNumber;
     
     // Convert BoundingBox to Detection format
     const detections: Detection[] = boxes.map(box => ({
-      bbox: [box.x, box.y, box.x + box.width, box.y + box.height], // Convert to tlbr
+      bbox: [box.x, box.y, box.x + box.width, box.y + box.height],
       score: box.confidence,
       class: box.class,
       headCenterX: box.headCenterX,
       headCenterY: box.headCenterY
     }));
     
-    // Filter detections by area
-    const validDetections = detections.filter(det => {
-      const [x1, y1, x2, y2] = det.bbox;
-      const area = (x2 - x1) * (y2 - y1);
-      return area > this.params.minBoxArea;
-    });
-    
-    // Separate detections by confidence
-    // For debugging: log actual scores
-    if (frameNumber === 213 && validDetections.length > 0) {
-      const scores = validDetections.map(d => d.score.toFixed(3)).join(', ');
-      // console.log(`Frame 213: ByteTracker scores=[${scores}], trackThresh=${this.params.trackThresh}, lowThresh=${this.params.lowThresh}`);
-    }
-    
-    const highDetections = validDetections.filter(det => det.score >= this.params.trackThresh);
-    const lowDetections = validDetections.filter(det => 
-      det.score >= this.params.lowThresh && det.score < this.params.trackThresh
+    // Separate high and low confidence detections
+    const highDetections = detections.filter(d => d.score >= this.params.trackThresh);
+    const lowDetections = detections.filter(d => 
+      d.score >= this.params.lowThresh && d.score < this.params.trackThresh
     );
     
-    if (frameNumber === 213) {
-      // console.log(`Frame 213: Valid detections: ${validDetections.length}, high: ${highDetections.length}, low: ${lowDetections.length}`);
-    }
-    
-    // Initialize new tracks for first frame
-    if (this.frameId === 1) {
-      const activatedStracks: STrack[] = [];
-      for (const det of highDetections) {
-        const track = STrack.fromDetection(det, this.frameId);
-        activatedStracks.push(track);
-      }
-      this.trackedStracks = activatedStracks;
-      return this.convertToOutput(this.trackedStracks);
-    }
-    
-    if (frameNumber === 213) {
-      // console.log(`Frame 213: ByteTracker frameId=${this.frameId}, not first frame, continuing...`);
-      // console.log(`Frame 213: Current tracked: ${this.trackedStracks.length}, lost: ${this.lostStracks.length}`);
-    }
-    
-    // Predict current tracks
-    const strack_pool = [...this.trackedStracks, ...this.lostStracks];
-    for (const track of strack_pool) {
-      track.predict();
-    }
-    
+    // Lists to store results
     const activatedStracks: STrack[] = [];
     const refindStracks: STrack[] = [];
     const lostStracks: STrack[] = [];
     const removedStracks: STrack[] = [];
     
-    /** Step 1: First association with high score detections */
+    // Separate confirmed and unconfirmed tracks
     const unconfirmedStracks: STrack[] = [];
     const trackedStracks: STrack[] = [];
     
@@ -110,284 +73,272 @@ export class ByteTracker {
       }
     }
     
-    if (frameNumber === 213) {
-      // console.log(`Frame 213: Step 1 - trackedStracks: ${trackedStracks.length}, unconfirmedStracks: ${unconfirmedStracks.length}`);
+    /** Step 1: Predict current location of tracks */
+    const strackPool = [...trackedStracks, ...this.lostStracks];
+    
+    // Multi-step prediction for 5-frame interval
+    for (const track of strackPool) {
+      const frameDiff = frameNumber - track.frameId;
+      // Predict multiple steps if we haven't seen this track for several frames
+      for (let i = 0; i < frameDiff; i++) {
+        track.predict();
+      }
     }
     
-    // Associate confirmed tracks with high detections
-    const dists = iouDistance(trackedStracks, highDetections);
-    const fusedDists = fuseScore(dists, highDetections);
-    const [matches, uTrackIdx, uDetIdx] = linearAssignment(fusedDists, this.params.matchThresh);
+    /** Step 2: First association with high score detection boxes */
+    let matches: Array<[number, number]> = [];
+    let uTrackIdx: number[] = [];
+    let uDetIdx: number[] = [];
     
-    // Update matched tracks
-    for (const [itrack, idet] of matches) {
-      const track = trackedStracks[itrack];
-      const det = highDetections[idet];
-      track.update(det, this.frameId);
-      activatedStracks.push(track);
-    }
-    
-    // Process unmatched tracks and detections
-    const remainTrackIdx = uTrackIdx;
-    const remainDetIdx = uDetIdx;
-    
-    if (frameNumber === 213) {
-      // console.log(`Frame 213: After Step 1 - unmatched tracks: ${remainTrackIdx.length}, unmatched detections: ${remainDetIdx.length}`);
-    }
-    
-    // Mark unmatched tracks
-    for (const idx of uTrackIdx) {
-      trackedStracks[idx].markLost();
-    }
-    
-    /** Step 2: Second association with low score detections */
-    if (lowDetections.length > 0) {
-      // Get remaining tracks
-      const remainingTracks = remainTrackIdx.map(i => trackedStracks[i]);
+    if (strackPool.length > 0 && highDetections.length > 0) {
+      const dists = iouDistance(strackPool, highDetections);
+      [matches, uTrackIdx, uDetIdx] = linearAssignment(dists, this.params.matchThresh);
       
-      const dists2 = iouDistance(remainingTracks, lowDetections);
-      const [matches2, uTrackIdx2, _] = linearAssignment(dists2, 0.5);
+      for (const [itrack, idet] of matches) {
+        const track = strackPool[itrack];
+        const det = highDetections[idet];
+        
+        if (track.state === TrackState.Tracked) {
+          track.update(det, frameNumber);
+          activatedStracks.push(track);
+        } else {
+          track.reActivate(det, frameNumber);
+          refindStracks.push(track);
+        }
+      }
+    } else {
+      uTrackIdx = Array.from({ length: strackPool.length }, (_, i) => i);
+      uDetIdx = Array.from({ length: highDetections.length }, (_, i) => i);
+    }
+    
+    /** Step 3: Second association with low score detection boxes */
+    const remainingTrackedIdx = uTrackIdx.filter(i => strackPool[i].state === TrackState.Tracked);
+    const remainingTracks = remainingTrackedIdx.map(i => strackPool[i]);
+    
+    if (remainingTracks.length > 0 && lowDetections.length > 0) {
+      const dists = iouDistance(remainingTracks, lowDetections);
+      const [matches2, uTrackIdx2, _] = linearAssignment(dists, this.params.secondMatchThresh);
       
       for (const [itrack, idet] of matches2) {
         const track = remainingTracks[itrack];
         const det = lowDetections[idet];
-        track.update(det, this.frameId);
+        track.update(det, frameNumber);
         activatedStracks.push(track);
       }
       
-      // Update remaining unmatched tracks
+      // Mark unmatched tracks as lost
       for (let i = 0; i < remainingTracks.length; i++) {
         if (!matches2.some(m => m[0] === i)) {
-          lostStracks.push(remainingTracks[i]);
+          const track = remainingTracks[i];
+          track.markLost();
+          lostStracks.push(track);
         }
       }
     } else {
-      // All unmatched tracks become lost
-      for (const idx of remainTrackIdx) {
-        lostStracks.push(trackedStracks[idx]);
+      // All unmatched tracked become lost
+      for (const idx of remainingTrackedIdx) {
+        const track = strackPool[idx];
+        track.markLost();
+        lostStracks.push(track);
       }
     }
     
-    /** Step 3: Deal with unconfirmed tracks */
-    const remainingHighDets = remainDetIdx.map(i => highDetections[i]);
+    /** Step 4: Deal with unconfirmed tracks */
+    const remainingHighDets = uDetIdx.map(i => highDetections[i]);
     
-    if (frameNumber === 213) {
-      // console.log(`Frame 213: Step 3 - remaining high detections: ${remainingHighDets.length}, unconfirmed tracks: ${unconfirmedStracks.length}`);
+    if (unconfirmedStracks.length > 0 && remainingHighDets.length > 0) {
+      const dists = iouDistance(unconfirmedStracks, remainingHighDets);
+      const [matches3, uUnconfirmedIdx, uDetIdx3] = linearAssignment(
+        dists, 
+        this.params.unconfirmedMatchThresh
+      );
+      
+      for (const [itrack, idet] of matches3) {
+        const track = unconfirmedStracks[itrack];
+        const det = remainingHighDets[idet];
+        track.update(det, frameNumber);
+        activatedStracks.push(track);
+      }
+      
+      // Remove unmatched unconfirmed tracks
+      for (const idx of uUnconfirmedIdx) {
+        const track = unconfirmedStracks[idx];
+        track.markRemoved();
+        removedStracks.push(track);
+      }
+      
+      // Update remaining detection indices
+      uDetIdx = uDetIdx3.map(i => uDetIdx[i]);
     }
     
-    const dists3 = iouDistance(unconfirmedStracks, remainingHighDets);
-    const [matches3, uTrackIdx3, uDetIdx3] = linearAssignment(dists3, 0.7);
-    
-    for (const [itrack, idet] of matches3) {
-      const track = unconfirmedStracks[itrack];
-      const det = remainingHighDets[idet];
-      track.update(det, this.frameId);
+    /** Step 5: Init new tracks */
+    for (const idx of uDetIdx) {
+      const det = highDetections[idx];
+      if (det.score < this.params.trackThresh) continue;
+      
+      const track = STrack.fromDetection(det, frameNumber);
+      track.activate(this.kalmanFilter, frameNumber);
       activatedStracks.push(track);
     }
     
-    // Remove unmatched unconfirmed tracks
-    for (const idx of uTrackIdx3) {
-      const track = unconfirmedStracks[idx];
-      track.markRemoved();
-      removedStracks.push(track);
-    }
-    
-    /** Step 4: Init new tracks */
-    const newDetIdx = uDetIdx3.map(i => remainDetIdx[i]);
-    const newDetections = newDetIdx.map(i => highDetections[i]);
-    
-    if (frameNumber === 213) {
-      // console.log(`Frame 213: Step 4 - New detections to track: ${newDetections.length}`);
-    }
-    
-    for (const det of newDetections) {
-      const track = STrack.fromDetection(det, this.frameId);
-      if (frameNumber === 213) {
-        // console.log(`Frame 213: Creating new track, isActivated=${track.isActivated}`);
-      }
-      if (!track.isActivated) {
-        activatedStracks.push(track);
-      }
-    }
-    
-    /** Step 5: Associate with lost tracks */
-    const allLostTracks = [...this.lostStracks, ...lostStracks];
-    const dists4 = iouDistance(allLostTracks, highDetections);
-    const [matches4, uTrackIdx4, _] = linearAssignment(dists4, this.params.matchThresh);
-    
-    for (const [itrack, idet] of matches4) {
-      const track = allLostTracks[itrack];
-      const det = highDetections[idet];
-      track.reActivate(det, this.frameId, false);
-      refindStracks.push(track);
-    }
-    
-    // Remove lost tracks that exceed buffer
-    for (const idx of uTrackIdx4) {
-      const track = allLostTracks[idx];
-      if (this.frameId - track.frameId > this.params.trackBuffer) {
+    /** Step 6: Update state */
+    // Remove timeout lost tracks
+    for (const track of this.lostStracks) {
+      if (frameNumber - track.frameId > this.params.maxTimeLost) {
         track.markRemoved();
         removedStracks.push(track);
       }
     }
     
-    /** Step 6: Update track states */
-    // Merge track lists
-    this.trackedStracks = this.jointStracks(
-      this.jointStracks(activatedStracks, refindStracks),
-      lostStracks.filter(t => t.state === TrackState.Lost)
+    // Update tracked list
+    this.trackedStracks = [
+      ...activatedStracks,
+      ...refindStracks
+    ].filter(t => t.state === TrackState.Tracked);
+    
+    // Update lost list
+    this.lostStracks = this.subStracks(
+      [...this.lostStracks, ...lostStracks],
+      [...this.trackedStracks, ...removedStracks]
     );
     
-    // Filter by state
-    this.trackedStracks = this.trackedStracks.filter(t => t.state === TrackState.Tracked);
-    this.lostStracks = this.subStracks(allLostTracks, this.trackedStracks);
-    this.lostStracks = this.subStracks(this.lostStracks, removedStracks);
+    // Update removed list
+    this.removedStracks = [...this.removedStracks, ...removedStracks];
     
     // Remove duplicate tracks
-    this.removeDuplicateStracks();
+    [this.trackedStracks, this.lostStracks] = this.removeDuplicateStracks(
+      this.trackedStracks, 
+      this.lostStracks
+    );
     
-    // Get output tracks
-    const outputStracks = this.trackedStracks.filter(track => track.isActivated);
+    // Filter activated tracks
+    const outputStracks = this.trackedStracks.filter(t => t.isActivated);
     
-    if (frameNumber === 213) {
-      // console.log(`Frame 213: ByteTracker output - detections: ${boxes.length}, tracked: ${outputStracks.length}, lost: ${this.lostStracks.length}`);
-    }
-    
-    const output = this.convertToOutput(outputStracks);
-    
-    if (frameNumber === 213) {
-      output.forEach((box, i) => {
-        // console.log(`  Frame 213 - Output box ${i}: trackId=${box.trackId}, confidence=${box.confidence.toFixed(3)}`);
-      });
-    }
-    
-    return output;
+    return this.convertToOutput(outputStracks);
   }
-
+  
   /**
-   * Remove duplicate tracks with high IoU
+   * Get interpolated positions for all frames
    */
-  private removeDuplicateStracks(): void {
-    const ious = this.calcIoUs(this.trackedStracks, this.trackedStracks);
+  getInterpolatedTracks(frameNumber: number): BoundingBox[] {
+    const allTracks = [...this.trackedStracks, ...this.lostStracks];
+    const outputBoxes: BoundingBox[] = [];
+    
+    for (const track of allTracks) {
+      if (track.frameId <= frameNumber && track.startFrame <= frameNumber) {
+        // Predict to current frame
+        const tempTrack = track.clone();
+        const frameDiff = frameNumber - track.frameId;
+        
+        for (let i = 0; i < frameDiff; i++) {
+          tempTrack.predict();
+        }
+        
+        const box = this.convertTrackToBox(tempTrack);
+        if (box) outputBoxes.push(box);
+      }
+    }
+    
+    return outputBoxes;
+  }
+  
+  private subStracks(tlista: STrack[], tlistb: STrack[]): STrack[] {
+    const trackIds = new Set(tlistb.map(t => t.trackId));
+    return tlista.filter(t => !trackIds.has(t.trackId));
+  }
+  
+  private removeDuplicateStracks(tracksa: STrack[], tracksb: STrack[]): [STrack[], STrack[]] {
+    const pdist = this.calcIoUs(tracksa, tracksb);
     const pairs: Array<[number, number]> = [];
     
-    for (let i = 0; i < ious.length; i++) {
-      for (let j = i + 1; j < ious[i].length; j++) {
-        if (ious[i][j] > 0.15) {
+    for (let i = 0; i < pdist.length; i++) {
+      for (let j = 0; j < pdist[i].length; j++) {
+        if (pdist[i][j] < 0.15) {
           pairs.push([i, j]);
         }
       }
     }
     
-    const toRemove = new Set<number>();
-    for (const [i, j] of pairs) {
-      const track1 = this.trackedStracks[i];
-      const track2 = this.trackedStracks[j];
+    const dupa: number[] = [];
+    const dupb: number[] = [];
+    
+    for (const [a, b] of pairs) {
+      const timep = tracksa[a].frameId - tracksa[a].startFrame;
+      const timeq = tracksb[b].frameId - tracksb[b].startFrame;
       
-      if (track1.age < track2.age) {
-        toRemove.add(i);
+      if (timep > timeq) {
+        dupb.push(b);
       } else {
-        toRemove.add(j);
+        dupa.push(a);
       }
     }
     
-    this.trackedStracks = this.trackedStracks.filter((_, idx) => !toRemove.has(idx));
+    const resa = tracksa.filter((_, i) => !dupa.includes(i));
+    const resb = tracksb.filter((_, i) => !dupb.includes(i));
+    
+    return [resa, resb];
   }
-
-  /**
-   * Calculate IoU matrix between two track lists
-   */
-  private calcIoUs(tracks1: STrack[], tracks2: STrack[]): number[][] {
+  
+  private calcIoUs(tracksa: STrack[], tracksb: STrack[]): number[][] {
     const ious: number[][] = [];
     
-    for (const track1 of tracks1) {
+    for (const ta of tracksa) {
       const row: number[] = [];
-      for (const track2 of tracks2) {
-        const [x1_1, y1_1, x2_1, y2_1] = track1.tlbr;
-        const [x1_2, y1_2, x2_2, y2_2] = track2.tlbr;
+      const [x1a, y1a, x2a, y2a] = ta.tlbr;
+      
+      for (const tb of tracksb) {
+        const [x1b, y1b, x2b, y2b] = tb.tlbr;
         
-        const xi1 = Math.max(x1_1, x1_2);
-        const yi1 = Math.max(y1_1, y1_2);
-        const xi2 = Math.min(x2_1, x2_2);
-        const yi2 = Math.min(y2_1, y2_2);
+        const xi1 = Math.max(x1a, x1b);
+        const yi1 = Math.max(y1a, y1b);
+        const xi2 = Math.min(x2a, x2b);
+        const yi2 = Math.min(y2a, y2b);
         
         const interArea = Math.max(0, xi2 - xi1) * Math.max(0, yi2 - yi1);
-        const box1Area = (x2_1 - x1_1) * (y2_1 - y1_1);
-        const box2Area = (x2_2 - x1_2) * (y2_2 - y1_2);
-        const unionArea = box1Area + box2Area - interArea;
+        const boxaArea = (x2a - x1a) * (y2a - y1a);
+        const boxbArea = (x2b - x1b) * (y2b - y1b);
+        const unionArea = boxaArea + boxbArea - interArea;
         
-        row.push(unionArea > 0 ? interArea / unionArea : 0);
+        const iou = unionArea > 0 ? 1 - interArea / unionArea : 1;
+        row.push(iou);
       }
       ious.push(row);
     }
     
     return ious;
   }
-
-  /**
-   * Joint two track lists
-   */
-  private jointStracks(tracks1: STrack[], tracks2: STrack[]): STrack[] {
-    const exists = new Map<number, STrack>();
-    const result: STrack[] = [];
+  
+  private convertTrackToBox(track: STrack): BoundingBox | null {
+    const [x, y, w, h] = track.tlwh;
     
-    for (const track of tracks1) {
-      exists.set(track.trackId, track);
-      result.push(track);
-    }
+    if (w <= 0 || h <= 0) return null;
     
-    for (const track of tracks2) {
-      if (!exists.has(track.trackId)) {
-        result.push(track);
-      }
-    }
-    
-    return result;
+    return {
+      x,
+      y,
+      width: w,
+      height: h,
+      class: track.class,
+      classId: 0,
+      confidence: track.score,
+      trackId: String(track.trackId),
+      headCenterX: track.headCenterX,
+      headCenterY: track.headCenterY
+    };
   }
-
-  /**
-   * Subtract tracks2 from tracks1
-   */
-  private subStracks(tracks1: STrack[], tracks2: STrack[]): STrack[] {
-    const trackIds = new Set(tracks2.map(t => t.trackId));
-    return tracks1.filter(t => !trackIds.has(t.trackId));
-  }
-
-  /**
-   * Convert STrack to BoundingBox output
-   */
+  
   private convertToOutput(tracks: STrack[]): BoundingBox[] {
-    return tracks.map(track => {
-      const [x, y, w, h] = track.tlwh;
-      const box: BoundingBox = {
-        x,
-        y,
-        width: w,
-        height: h,
-        class: track.class,
-        classId: 0, // person class
-        confidence: track.score,
-        trackId: `${track.trackId}`
-      };
-      
-      // Preserve head center if available
-      if (track.headCenterX !== undefined && track.headCenterY !== undefined) {
-        box.headCenterX = track.headCenterX;
-        box.headCenterY = track.headCenterY;
-      }
-      
-      return box;
-    });
+    return tracks
+      .map(track => this.convertTrackToBox(track))
+      .filter((box): box is BoundingBox => box !== null);
   }
-
-  /**
-   * Reset tracker state
-   */
+  
   reset(): void {
     this.trackedStracks = [];
     this.lostStracks = [];
     this.removedStracks = [];
     this.frameId = 0;
+    this.detectionFrameId = 0;
     STrack.resetId();
   }
 }

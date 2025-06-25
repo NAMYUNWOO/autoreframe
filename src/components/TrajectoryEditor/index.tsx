@@ -464,13 +464,15 @@ export function TrajectoryEditor({
         <p>• Cyan line shows trajectory path (±30 frames)</p>
       </div>
 
-      <div 
-        className="relative mb-4 bg-black rounded-lg overflow-hidden flex items-center justify-center"
-        style={{ 
-          maxHeight: 'calc(100vh - 500px)',
-          aspectRatio: `${metadata.width}/${metadata.height}`
-        }}
-      >
+      <div className="w-full flex justify-center mb-4">
+        <div 
+          className="relative bg-black rounded-lg overflow-hidden w-full"
+          style={{ 
+            maxHeight: 'calc(100vh - 500px)',
+            aspectRatio: `${metadata.width}/${metadata.height}`,
+            maxWidth: '100%'
+          }}
+        >
         <canvas
           ref={canvasRef}
           width={metadata.width}
@@ -489,6 +491,7 @@ export function TrajectoryEditor({
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         />
+        </div>
       </div>
 
       {/* Timeline */}

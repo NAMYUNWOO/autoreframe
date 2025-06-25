@@ -2,187 +2,130 @@ import { STrack } from './strack';
 import { Detection } from './types';
 
 /**
- * Calculate IoU between two boxes in tlbr format
- */
-export function calcIoU(box1: number[], box2: number[]): number {
-  const [x1_1, y1_1, x2_1, y2_1] = box1;
-  const [x1_2, y1_2, x2_2, y2_2] = box2;
-  
-  const xi1 = Math.max(x1_1, x1_2);
-  const yi1 = Math.max(y1_1, y1_2);
-  const xi2 = Math.min(x2_1, x2_2);
-  const yi2 = Math.min(y2_1, y2_2);
-  
-  const interArea = Math.max(0, xi2 - xi1) * Math.max(0, yi2 - yi1);
-  
-  const box1Area = (x2_1 - x1_1) * (y2_1 - y1_1);
-  const box2Area = (x2_2 - x1_2) * (y2_2 - y1_2);
-  
-  const unionArea = box1Area + box2Area - interArea;
-  
-  return unionArea > 0 ? interArea / unionArea : 0;
-}
-
-/**
  * Calculate IoU distance matrix between tracks and detections
  */
-export function iouDistance(tracks: STrack[], detections: Detection[]): number[][] {
-  const costMatrix: number[][] = [];
-  
-  for (const track of tracks) {
-    const costs: number[] = [];
-    for (const det of detections) {
-      const iou = calcIoU(track.tlbr, det.bbox);
-      costs.push(1 - iou); // Convert IoU to cost
-    }
-    costMatrix.push(costs);
+export function iouDistance(
+  atracks: STrack[], 
+  btracks: Detection[] | STrack[]
+): number[][] {
+  if (atracks.length === 0 || btracks.length === 0) {
+    return [];
   }
   
-  return costMatrix;
+  const atlbrs = atracks.map(t => t.tlbr);
+  const btlbrs: number[][] = [];
+  
+  // Convert to tlbr format
+  for (const b of btracks) {
+    if ('bbox' in b) {
+      // Detection format - already in tlbr
+      btlbrs.push(b.bbox);
+    } else {
+      // STrack format
+      btlbrs.push((b as STrack).tlbr);
+    }
+  }
+  
+  // Calculate IoU matrix
+  const ious = calcIoUs(atlbrs, btlbrs);
+  
+  // Convert to distance (1 - IoU)
+  const dists = ious.map(row => row.map(iou => 1 - iou));
+  
+  return dists;
 }
 
 /**
- * Fuse detection scores with IoU for better matching
+ * Calculate IoU between two sets of bounding boxes
  */
-export function fuseScore(costMatrix: number[][], detections: Detection[]): number[][] {
-  const iouSim = costMatrix.map(row => row.map(cost => 1 - cost));
-  const detScores = detections.map(det => det.score);
+function calcIoUs(tlbrs1: number[][], tlbrs2: number[][]): number[][] {
+  const ious: number[][] = [];
   
-  const fusedMatrix: number[][] = [];
-  for (let i = 0; i < iouSim.length; i++) {
-    const fusedRow: number[] = [];
-    for (let j = 0; j < iouSim[i].length; j++) {
-      const fusedSim = iouSim[i][j] * detScores[j];
-      fusedRow.push(1 - fusedSim); // Convert back to cost
+  for (const tlbr1 of tlbrs1) {
+    const row: number[] = [];
+    const [x1a, y1a, x2a, y2a] = tlbr1;
+    const areaA = (x2a - x1a) * (y2a - y1a);
+    
+    for (const tlbr2 of tlbrs2) {
+      const [x1b, y1b, x2b, y2b] = tlbr2;
+      const areaB = (x2b - x1b) * (y2b - y1b);
+      
+      // Calculate intersection
+      const x1i = Math.max(x1a, x1b);
+      const y1i = Math.max(y1a, y1b);
+      const x2i = Math.min(x2a, x2b);
+      const y2i = Math.min(y2a, y2b);
+      
+      const intersection = Math.max(0, x2i - x1i) * Math.max(0, y2i - y1i);
+      const union = areaA + areaB - intersection;
+      
+      const iou = union > 0 ? intersection / union : 0;
+      row.push(iou);
     }
-    fusedMatrix.push(fusedRow);
+    
+    ious.push(row);
   }
   
-  return fusedMatrix;
+  return ious;
 }
 
 /**
- * Hungarian algorithm implementation for linear assignment
+ * Simple linear assignment using greedy matching
+ * For production, consider using Hungarian algorithm
  */
-export function linearAssignment(costMatrix: number[][], threshold: number = 1.0): [number[][], number[], number[]] {
+export function linearAssignment(
+  costMatrix: number[][], 
+  thresh: number
+): [Array<[number, number]>, number[], number[]] {
   if (costMatrix.length === 0 || costMatrix[0].length === 0) {
-    return [[], Array.from({length: costMatrix.length}, (_, i) => i), Array.from({length: costMatrix[0]?.length || 0}, (_, i) => i)];
+    const unmatchedA = Array.from({ length: costMatrix.length }, (_, i) => i);
+    const unmatchedB = Array.from({ length: costMatrix[0]?.length || 0 }, (_, i) => i);
+    return [[], unmatchedA, unmatchedB];
   }
   
   const nRows = costMatrix.length;
   const nCols = costMatrix[0].length;
-  const maxCost = 1e9;
+  const matches: Array<[number, number]> = [];
+  const matchedRows = new Set<number>();
+  const matchedCols = new Set<number>();
   
-  // Pad cost matrix to make it square
-  const size = Math.max(nRows, nCols);
-  const paddedCost: number[][] = [];
-  
-  for (let i = 0; i < size; i++) {
-    const row: number[] = [];
-    for (let j = 0; j < size; j++) {
-      if (i < nRows && j < nCols) {
-        row.push(costMatrix[i][j]);
-      } else {
-        row.push(maxCost);
+  // Find all valid matches below threshold
+  const validMatches: Array<[number, number, number]> = [];
+  for (let i = 0; i < nRows; i++) {
+    for (let j = 0; j < nCols; j++) {
+      if (costMatrix[i][j] <= thresh) {
+        validMatches.push([i, j, costMatrix[i][j]]);
       }
     }
-    paddedCost.push(row);
   }
   
-  // Hungarian algorithm
-  const assignment = hungarianAlgorithm(paddedCost);
+  // Sort by cost (ascending)
+  validMatches.sort((a, b) => a[2] - b[2]);
   
-  // Filter valid assignments
-  const matches: number[][] = [];
+  // Greedy matching
+  for (const [i, j, cost] of validMatches) {
+    if (!matchedRows.has(i) && !matchedCols.has(j)) {
+      matches.push([i, j]);
+      matchedRows.add(i);
+      matchedCols.add(j);
+    }
+  }
+  
+  // Find unmatched indices
   const unmatchedA: number[] = [];
   const unmatchedB: number[] = [];
   
-  const assignedB = new Set<number>();
-  
   for (let i = 0; i < nRows; i++) {
-    const j = assignment[i];
-    if (j < nCols && costMatrix[i][j] < threshold) {
-      matches.push([i, j]);
-      assignedB.add(j);
-    } else {
+    if (!matchedRows.has(i)) {
       unmatchedA.push(i);
     }
   }
   
   for (let j = 0; j < nCols; j++) {
-    if (!assignedB.has(j)) {
+    if (!matchedCols.has(j)) {
       unmatchedB.push(j);
     }
   }
   
   return [matches, unmatchedA, unmatchedB];
-}
-
-/**
- * Simplified Hungarian algorithm
- */
-function hungarianAlgorithm(costMatrix: number[][]): number[] {
-  const n = costMatrix.length;
-  const INF = 1e9;
-  
-  // Initialize
-  const u = new Array(n + 1).fill(0);
-  const v = new Array(n + 1).fill(0);
-  const p = new Array(n + 1).fill(0);
-  const way = new Array(n + 1).fill(0);
-  
-  for (let i = 1; i <= n; ++i) {
-    p[0] = i;
-    let j0 = 0;
-    const minv = new Array(n + 1).fill(INF);
-    const used = new Array(n + 1).fill(false);
-    
-    do {
-      used[j0] = true;
-      let i0 = p[j0];
-      let delta = INF;
-      let j1 = 0;
-      
-      for (let j = 1; j <= n; ++j) {
-        if (!used[j]) {
-          const cur = costMatrix[i0 - 1][j - 1] - u[i0] - v[j];
-          if (cur < minv[j]) {
-            minv[j] = cur;
-            way[j] = j0;
-          }
-          if (minv[j] < delta) {
-            delta = minv[j];
-            j1 = j;
-          }
-        }
-      }
-      
-      for (let j = 0; j <= n; ++j) {
-        if (used[j]) {
-          u[p[j]] += delta;
-          v[j] -= delta;
-        } else {
-          minv[j] -= delta;
-        }
-      }
-      
-      j0 = j1;
-    } while (p[j0] !== 0);
-    
-    do {
-      const j1 = way[j0];
-      p[j0] = p[j1];
-      j0 = j1;
-    } while (j0);
-  }
-  
-  // Extract assignment
-  const assignment = new Array(n).fill(-1);
-  for (let j = 1; j <= n; ++j) {
-    if (p[j] !== 0) {
-      assignment[p[j] - 1] = j - 1;
-    }
-  }
-  
-  return assignment;
 }

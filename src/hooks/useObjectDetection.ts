@@ -99,7 +99,7 @@ export function useObjectDetection() {
       byteTrackerRef.current = new ByteTrackInterpolator({
         trackThresh: 0.3,
         trackBuffer: 30,
-        matchThresh: 0.8,
+        matchThresh: 0.5, // Lowered to handle larger movements with 5-frame sampling
         minBoxArea: 100,
         lowThresh: 0.1
       });
@@ -437,7 +437,7 @@ export function useObjectDetection() {
       byteTrackerRef.current = new ByteTrackInterpolator({
         trackThresh: threshold, // Use the same threshold as detector
         trackBuffer: 30,
-        matchThresh: 0.8,
+        matchThresh: 0.5, // Lowered to handle larger movements with 5-frame sampling
         minBoxArea: 100,
         lowThresh: Math.max(0.1, threshold * 0.5) // Low threshold is half of main threshold
       });

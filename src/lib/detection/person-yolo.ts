@@ -1,7 +1,20 @@
 import * as tf from '@tensorflow/tfjs';
 import { BoundingBox } from '@/types';
 
+/**
+ * YOLOv12n Person Detector
+ * 
+ * This detector uses a YOLOv8n model (named v12n in the codebase) for person detection.
+ * The model outputs pre-processed detections with NMS already applied.
+ * 
+ * Mobile-specific behavior:
+ * - On mobile devices, the model may output confidence values in a separate tensor
+ * - The first tensor contains bounding boxes with zero confidence values
+ * - The second tensor (shape: [1500]) contains the actual confidence scores
+ * - First 300 values of the second tensor map to the 300 detections
+ */
 export class PersonYOLODetector {
+  private static instance: PersonYOLODetector | null = null;
   private model: tf.GraphModel | null = null;
   private modelPath: string = '/yolov12n_web_model/model.json';
   private inputSize: number = 640;
@@ -12,6 +25,14 @@ export class PersonYOLODetector {
   }
   private iouThreshold: number = 0.45;
   private maxDetections: number = 100;
+  
+  // Singleton pattern for mobile to reuse model
+  static getInstance(): PersonYOLODetector {
+    if (!PersonYOLODetector.instance) {
+      PersonYOLODetector.instance = new PersonYOLODetector();
+    }
+    return PersonYOLODetector.instance;
+  }
   
   // COCO class names - person is class 0
   private classNames: string[] = [
@@ -29,9 +50,33 @@ export class PersonYOLODetector {
 
 
   async initialize(): Promise<void> {
+    // Skip if already initialized
+    if (this.model) {
+      console.log('Model already initialized, skipping...');
+      return;
+    }
+    
     try {
+      // Set up TensorFlow.js backend for mobile compatibility
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      console.log('Initializing on mobile:', isMobile);
+      
+      if (isMobile) {
+        // Use same WebGL configuration as PC for consistency
+        try {
+          await tf.setBackend('webgl');
+          // Disable F16 textures to match PC precision
+          tf.env().set('WEBGL_FORCE_F16_TEXTURES', false);
+          tf.env().set('WEBGL_DELETE_TEXTURE_THRESHOLD', 0);
+          tf.env().set('WEBGL_PACK', true);
+        } catch (webglError) {
+          console.warn('WebGL backend failed on mobile, falling back to CPU:', webglError);
+          await tf.setBackend('cpu');
+        }
+      }
+      
       await tf.ready();
-      console.log('Loading YOLOv12n model from:', this.modelPath);
+      console.log('TensorFlow.js backend:', tf.getBackend());
       console.log('TensorFlow.js version:', tf.version.tfjs);
       
       // Try to fetch the model.json first to verify it's accessible
@@ -104,92 +149,141 @@ export class PersonYOLODetector {
     
     // Handle both single tensor and array outputs (YOLOv12n returns array)
     let predictions: tf.Tensor;
+    let confidenceTensor: tf.Tensor | null = null;
+    
     if (Array.isArray(result)) {
       predictions = result[0] as tf.Tensor;
+      
+      // Always keep the second tensor if it exists - might contain confidence scores
+      if (result.length > 1) {
+        confidenceTensor = result[1] as tf.Tensor;
+      }
+      
       // Dispose other outputs if any
-      for (let i = 1; i < result.length; i++) {
+      for (let i = 2; i < result.length; i++) {
         result[i].dispose();
       }
     } else {
       predictions = result as tf.Tensor;
     }
     
-    const boxes = await this.postprocess(predictions, imageData, frameNumber);
+    const boxes = await this.postprocess(predictions, imageData, frameNumber, confidenceTensor);
     
     // Clean up tensors
     input.dispose();
     predictions.dispose();
+    if (confidenceTensor) {
+      confidenceTensor.dispose();
+    }
     
     return boxes;
   }
 
   private async preprocessImage(imageData: ImageData | HTMLVideoElement | HTMLCanvasElement): Promise<tf.Tensor> {
-    let imageTensor: tf.Tensor;
-    
-    if (imageData instanceof ImageData) {
-      imageTensor = tf.browser.fromPixels(imageData);
-    } else {
-      imageTensor = tf.browser.fromPixels(imageData);
-    }
-    
-    // Resize to model input size
-    const resized = tf.image.resizeBilinear(imageTensor as tf.Tensor3D, [this.inputSize, this.inputSize]);
-    
-    // Normalize to [0, 1]
-    const normalized = resized.div(255.0);
-    
-    // Add batch dimension
-    const batched = normalized.expandDims(0);
-    
-    // Clean up intermediate tensors
-    imageTensor.dispose();
-    resized.dispose();
-    normalized.dispose();
-    
-    return batched;
+    return tf.tidy(() => {
+      // Use the same preprocessing for both mobile and PC
+      const imageTensor = tf.browser.fromPixels(imageData);
+      
+      // Resize to model input size
+      const resized = tf.image.resizeBilinear(imageTensor, [this.inputSize, this.inputSize]);
+      
+      // Normalize to [0, 1]
+      const normalized = resized.div(255.0);
+      
+      // Add batch dimension
+      const batched = normalized.expandDims(0);
+      
+      
+      return batched;
+    });
   }
 
-  private async postprocess(predictions: tf.Tensor, originalImage: ImageData | HTMLVideoElement | HTMLCanvasElement, frameNumber?: number): Promise<BoundingBox[]> {
+  private async postprocess(predictions: tf.Tensor, originalImage: ImageData | HTMLVideoElement | HTMLCanvasElement, frameNumber?: number, confidenceTensor?: tf.Tensor | null): Promise<BoundingBox[]> {
     const [height, width] = originalImage instanceof ImageData 
       ? [originalImage.height, originalImage.width]
       : [originalImage.height, originalImage.width];
     
-    // This YOLOv12n model outputs [1, 300, 6] with NMS already applied
-    // Format: [x1, y1, x2, y2, confidence, class]
-    const data = await predictions.arraySync() as number[][][];
-    const detections = data[0]; // Remove batch dimension
-    
-    const boxes: BoundingBox[] = [];
-    
-    // Process each detection
-    for (const bbox of detections) {
-      const x1 = bbox[0];
-      const y1 = bbox[1];
-      const x2 = bbox[2];
-      const y2 = bbox[3];
-      const score = bbox[4];
-      const classId = bbox[5];
+    // Try the reference implementation approach using tensor operations
+    return tf.tidy(() => {
+      // Remove batch dimension
+      const squeezedPredictions = predictions.squeeze([0]); // Shape: [300, 6]
       
-      // Filter by confidence threshold and only keep person detections (class 0)
-      if (score > this.confidenceThreshold && classId === 0) {
-        // Scale coordinates from model input size to original image size
-        const scaleX = width / this.inputSize;
-        const scaleY = height / this.inputSize;
+      // Extract confidence scores (index 4)
+      const confidences = squeezedPredictions.slice([0, 4], [-1, 1]).squeeze(); // Shape: [300]
+      
+      // Get the data synchronously for processing
+      const predictionsData = squeezedPredictions.arraySync() as number[][];
+      let confidenceData = confidences.dataSync() as Float32Array;
+      
+      // YOLOv12n might output confidence values in a separate tensor
+      // Check this regardless of platform for consistency
+      if (confidenceTensor) {
+        const secondTensorData = confidenceTensor.dataSync() as Float32Array;
         
-        boxes.push({
-          x: Math.max(0, x1 * scaleX),
-          y: Math.max(0, y1 * scaleY),
-          width: Math.min((x2 - x1) * scaleX, width - x1 * scaleX),
-          height: Math.min((y2 - y1) * scaleY, height - y1 * scaleY),
-          confidence: score,
-          class: 'person',
-          classId: 0
-        });
+        // If the main tensor has all zero confidences but second tensor has values, 
+        // use the second tensor for confidence scores
+        if (Math.max(...confidenceData) === 0 && secondTensorData.some(v => v > 0)) {
+          // The second tensor contains confidence scores for the detections
+          // Direct mapping: first 300 values correspond to the 300 detections
+          if (secondTensorData.length >= 300) {
+            confidenceData = secondTensorData.slice(0, 300) as Float32Array;
+          }
+        }
       }
-    }
-    
-    // NMS is already applied by the model, so we don't need to apply it again
-    return boxes;
+      
+      // Create mask for detections above threshold
+      const mask = confidenceData.map(c => c > this.confidenceThreshold);
+      
+      
+      const boxes: BoundingBox[] = [];
+      let personCount = 0;
+      let lowConfCount = 0;
+      
+      // Process each detection
+      for (let i = 0; i < predictionsData.length; i++) {
+        const bbox = predictionsData[i];
+        const isValid = mask[i];
+        const x1 = bbox[0];
+        const y1 = bbox[1];
+        const x2 = bbox[2];
+        const y2 = bbox[3];
+        const score = confidenceData[i]; // Use extracted confidence
+        const classId = Math.round(bbox[5]);
+        
+        // Count persons regardless of confidence
+        if (classId === 0) {
+          personCount++;
+          if (score <= this.confidenceThreshold) {
+            lowConfCount++;
+          }
+          
+        }
+        
+        // Filter by confidence threshold and only keep person detections (class 0)
+        if (isValid && classId === 0) {
+          // Scale coordinates from model input size to original image size
+          const scaleX = width / this.inputSize;
+          const scaleY = height / this.inputSize;
+          
+          boxes.push({
+            x: Math.max(0, x1 * scaleX),
+            y: Math.max(0, y1 * scaleY),
+            width: Math.min((x2 - x1) * scaleX, width - x1 * scaleX),
+            height: Math.min((y2 - y1) * scaleY, height - y1 * scaleY),
+            confidence: score,
+            class: 'person',
+            classId: 0
+          });
+        }
+      }
+      
+      
+      // Clean up tensors
+      squeezedPredictions.dispose();
+      confidences.dispose();
+      
+      return boxes;
+    });
   }
 
   private nonMaxSuppression(boxes: BoundingBox[]): BoundingBox[] {

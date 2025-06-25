@@ -230,7 +230,7 @@ export function HeadSelector({
       // console.log('HeadSelector: ByteTracker using threshold', confidenceThreshold);
       
       // Process first frame with ByteTracker
-      const finalDetections = byteTracker.update(personDetections);
+      const finalDetections = byteTracker.update(personDetections, 0);
       // console.log('ByteTracker detections:', finalDetections.length);
         
         // Try to detect heads for each person

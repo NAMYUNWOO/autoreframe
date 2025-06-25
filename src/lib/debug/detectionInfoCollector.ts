@@ -1,4 +1,4 @@
-import { VideoMetadata, Detection } from '@/types';
+import { VideoMetadata, Detection, BoundingBox } from '@/types';
 import { PersonYOLODetector } from '@/lib/detection/person-yolo';
 import { ByteTrackInterpolator } from '@/lib/detection/bytetrack-interpolator';
 import JSZip from 'jszip';

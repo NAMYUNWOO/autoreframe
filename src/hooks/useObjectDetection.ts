@@ -3,6 +3,7 @@ import { PersonYOLODetector } from '@/lib/detection/person-yolo';
 import { ByteTrackInterpolator } from '@/lib/detection/bytetrack-interpolator';
 import { HeadDetector } from '@/lib/detection/head-detector';
 import { Detection, BoundingBox, TrackedObject } from '@/types';
+import { detectionConfig } from '@/config/detection';
 
 // Helper function to calculate IoU between two bounding boxes
 function calculateIoU(box1: BoundingBox, box2: BoundingBox): number {
@@ -148,7 +149,7 @@ export function useObjectDetection() {
     const totalFrames = Math.floor(metadata.fps * metadata.duration);
     // When using ByteTracker, we should only call it on frames where we actually run detection
     // to avoid breaking temporal consistency
-    const sampleInterval = 5; // Detect every 5 frames
+    const sampleInterval = detectionConfig.sampleInterval; // Use config value
     let processedFrames = 0;
     let detectionFrameCount = 0; // Count only frames where detection runs
 

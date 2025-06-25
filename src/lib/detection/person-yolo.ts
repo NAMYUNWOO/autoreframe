@@ -1,5 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 import { BoundingBox } from '@/types';
+import { detectionConfig } from '@/config/detection';
 
 /**
  * YOLOv12n Person Detector
@@ -18,13 +19,13 @@ export class PersonYOLODetector {
   private model: tf.GraphModel | null = null;
   private modelPath: string = '/yolov12n_web_model/model.json';
   private inputSize: number = 640;
-  private confidenceThreshold: number = 0.3; // 30% default confidence threshold for better detection
+  private confidenceThreshold: number = detectionConfig.yolo.confidenceThreshold;
+  private iouThreshold: number = detectionConfig.yolo.iouThreshold;
+  private maxDetections: number = detectionConfig.yolo.maxDetections;
   
   constructor() {
     // console.log('PersonYOLODetector constructor: initial threshold', this.confidenceThreshold);
   }
-  private iouThreshold: number = 0.45;
-  private maxDetections: number = 100;
   
   // Singleton pattern for mobile to reuse model
   static getInstance(): PersonYOLODetector {

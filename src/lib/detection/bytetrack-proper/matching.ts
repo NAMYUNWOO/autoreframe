@@ -1,8 +1,10 @@
 import { STrack } from './strack';
 import { Detection } from './types';
+import { detectionConfig } from '@/config/detection';
 
 /**
  * Calculate IoU distance matrix between tracks and detections
+ * Now includes center distance to handle size changes better
  */
 export function iouDistance(
   atracks: STrack[], 
@@ -29,8 +31,28 @@ export function iouDistance(
   // Calculate IoU matrix
   const ious = calcIoUs(atlbrs, btlbrs);
   
-  // Convert to distance (1 - IoU)
-  const dists = ious.map(row => row.map(iou => 1 - iou));
+  // Calculate center distances
+  const centerDists = calcCenterDistances(atlbrs, btlbrs);
+  
+  // Combine IoU and center distance
+  // When box size changes dramatically, IoU can be low but center distance remains reliable
+  const dists: number[][] = [];
+  for (let i = 0; i < ious.length; i++) {
+    const row: number[] = [];
+    for (let j = 0; j < ious[i].length; j++) {
+      const iouDist = 1 - ious[i][j];
+      const centerDist = centerDists[i][j];
+      
+      // Weighted combination: IoU is still important but center distance helps
+      // when box size changes dramatically
+      const centerWeight = detectionConfig.byteTracker.centerDistanceWeight;
+      const iouWeight = 1 - centerWeight;
+      const combinedDist = iouWeight * iouDist + centerWeight * centerDist;
+      
+      row.push(combinedDist);
+    }
+    dists.push(row);
+  }
   
   return dists;
 }
@@ -67,6 +89,48 @@ function calcIoUs(tlbrs1: number[][], tlbrs2: number[][]): number[][] {
   }
   
   return ious;
+}
+
+/**
+ * Calculate normalized center distances between two sets of bounding boxes
+ */
+function calcCenterDistances(tlbrs1: number[][], tlbrs2: number[][]): number[][] {
+  const distances: number[][] = [];
+  
+  // Get image dimensions for normalization (approximate from box coordinates)
+  let maxX = 0, maxY = 0;
+  for (const tlbr of [...tlbrs1, ...tlbrs2]) {
+    maxX = Math.max(maxX, tlbr[2]);
+    maxY = Math.max(maxY, tlbr[3]);
+  }
+  const diagLength = Math.sqrt(maxX * maxX + maxY * maxY);
+  
+  for (const tlbr1 of tlbrs1) {
+    const row: number[] = [];
+    const [x1a, y1a, x2a, y2a] = tlbr1;
+    const centerX1 = (x1a + x2a) / 2;
+    const centerY1 = (y1a + y2a) / 2;
+    
+    for (const tlbr2 of tlbrs2) {
+      const [x1b, y1b, x2b, y2b] = tlbr2;
+      const centerX2 = (x1b + x2b) / 2;
+      const centerY2 = (y1b + y2b) / 2;
+      
+      // Euclidean distance between centers
+      const distance = Math.sqrt(
+        Math.pow(centerX1 - centerX2, 2) + 
+        Math.pow(centerY1 - centerY2, 2)
+      );
+      
+      // Normalize by diagonal length to get value between 0 and 1
+      const normalizedDistance = Math.min(distance / diagLength, 1.0);
+      row.push(normalizedDistance);
+    }
+    
+    distances.push(row);
+  }
+  
+  return distances;
 }
 
 /**

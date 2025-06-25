@@ -2,6 +2,7 @@ import { VideoMetadata, Detection } from '@/types';
 import { PersonYOLODetector } from '@/lib/detection/person-yolo';
 import { ByteTrackInterpolator } from '@/lib/detection/bytetrack-interpolator';
 import JSZip from 'jszip';
+import { detectionConfig } from '@/config/detection';
 
 // Types for detection info
 interface DetectionInfo {
@@ -28,11 +29,11 @@ export async function collectDetectionInfo(
   await detector.initialize();
   
   const tracker = new ByteTrackInterpolator({
-    trackThresh: 0.3,
-    trackBuffer: 30,
-    matchThresh: 0.5,  // Lowered from 0.8 to handle larger movements between frames
-    minBoxArea: 100,
-    lowThresh: 0.1
+    trackThresh: detectionConfig.byteTracker.trackThresh,
+    trackBuffer: detectionConfig.byteTracker.trackBuffer,
+    matchThresh: detectionConfig.byteTracker.matchThresh,
+    minBoxArea: detectionConfig.byteTracker.minBoxArea,
+    lowThresh: detectionConfig.byteTracker.lowThresh
   });
   
   // Reset tracker to ensure fresh start
@@ -44,8 +45,8 @@ export async function collectDetectionInfo(
   
   console.log('Starting detection info collection...');
   
-  // Sample interval - same as the main app
-  const sampleInterval = 5;
+  // Sample interval from config
+  const sampleInterval = detectionConfig.sampleInterval;
   const totalFrames = Math.floor(metadata.fps * metadata.duration);
   
   // Process video frames

@@ -3,6 +3,7 @@ import { iouDistance, linearAssignment } from './matching';
 import { STrack, TrackState } from './strack';
 import { BoundingBox } from '@/types';
 import { TrackParams, Detection } from './types';
+import { detectionConfig } from '@/config/detection';
 
 export class ByteTracker {
   private trackedStracks: STrack[] = [];
@@ -15,16 +16,19 @@ export class ByteTracker {
   private sampleInterval: number = 5; // We detect every 5 frames
   
   constructor(params: Partial<TrackParams> = {}) {
+    // Use config values as defaults, allow override via params
     this.params = {
-      trackThresh: params.trackThresh ?? 0.3,
-      trackBuffer: params.trackBuffer ?? 30,
-      matchThresh: params.matchThresh ?? 0.5, // More lenient for 5-frame gaps
-      minBoxArea: params.minBoxArea ?? 100,
-      lowThresh: params.lowThresh ?? 0.1,
-      secondMatchThresh: params.secondMatchThresh ?? 0.5,
-      unconfirmedMatchThresh: params.unconfirmedMatchThresh ?? 0.7,
-      maxTimeLost: params.maxTimeLost ?? 30
+      trackThresh: params.trackThresh ?? detectionConfig.byteTracker.trackThresh,
+      trackBuffer: params.trackBuffer ?? detectionConfig.byteTracker.trackBuffer,
+      matchThresh: params.matchThresh ?? detectionConfig.byteTracker.matchThresh,
+      minBoxArea: params.minBoxArea ?? detectionConfig.byteTracker.minBoxArea,
+      lowThresh: params.lowThresh ?? detectionConfig.byteTracker.lowThresh,
+      secondMatchThresh: params.secondMatchThresh ?? detectionConfig.byteTracker.secondMatchThresh,
+      unconfirmedMatchThresh: params.unconfirmedMatchThresh ?? detectionConfig.byteTracker.unconfirmedMatchThresh,
+      maxTimeLost: params.maxTimeLost ?? detectionConfig.byteTracker.maxTimeLost
     };
+    
+    this.sampleInterval = detectionConfig.sampleInterval;
     
     this.kalmanFilter = new KalmanFilter();
     STrack.resetId();
@@ -171,7 +175,31 @@ export class ByteTracker {
       uDetIdx = uDetIdx3.map(i => uDetIdx[i]);
     }
     
-    /** Step 5: Init new tracks */
+    /** Step 5: Try to associate with lost tracks before creating new ones */
+    const remainingHighDets2 = uDetIdx.map(i => highDetections[i]);
+    const allLostTracks = [...this.lostStracks, ...this.removedStracks];
+    
+    if (allLostTracks.length > 0 && remainingHighDets2.length > 0) {
+      // Very lenient threshold for lost track association
+      const dists = iouDistance(allLostTracks, remainingHighDets2);
+      const [matches4, uLostIdx, uDetIdx4] = linearAssignment(dists, 0.9); // Very lenient
+      
+      for (const [itrack, idet] of matches4) {
+        const track = allLostTracks[itrack];
+        const det = remainingHighDets2[idet];
+        track.reActivate(det, frameNumber);
+        refindStracks.push(track);
+        
+        // Remove from lost/removed lists
+        this.lostStracks = this.lostStracks.filter(t => t.trackId !== track.trackId);
+        this.removedStracks = this.removedStracks.filter(t => t.trackId !== track.trackId);
+      }
+      
+      // Update remaining detections
+      uDetIdx = uDetIdx4.map(i => uDetIdx[i]);
+    }
+    
+    /** Step 6: Init new tracks only for truly unmatched detections */
     for (const idx of uDetIdx) {
       const det = highDetections[idx];
       if (det.score < this.params.trackThresh) continue;
@@ -181,7 +209,7 @@ export class ByteTracker {
       activatedStracks.push(track);
     }
     
-    /** Step 6: Update state */
+    /** Step 7: Update state */
     // Remove timeout lost tracks
     for (const track of this.lostStracks) {
       if (frameNumber - track.frameId > this.params.maxTimeLost) {

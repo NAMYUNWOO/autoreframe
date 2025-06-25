@@ -4,6 +4,7 @@ import { ByteTrackInterpolator } from '@/lib/detection/bytetrack-interpolator';
 import { HeadDetector } from '@/lib/detection/head-detector';
 import { Detection, BoundingBox, TrackedObject } from '@/types';
 import { detectionConfig } from '@/config/detection';
+import { getAdaptiveConfig } from '@/config/detection-adaptive';
 
 // Helper function to calculate IoU between two bounding boxes
 function calculateIoU(box1: BoundingBox, box2: BoundingBox): number {
@@ -96,14 +97,9 @@ export function useObjectDetection() {
     
     // Always use ByteTrack for consistency
     if (!byteTrackerRef.current) {
-      // console.warn('ByteTracker not initialized, using default params');
-      byteTrackerRef.current = new ByteTrackInterpolator({
-        trackThresh: 0.3,
-        trackBuffer: 30,
-        matchThresh: 0.5, // Lowered to handle larger movements with 5-frame sampling
-        minBoxArea: 100,
-        lowThresh: 0.1
-      });
+      // console.warn('ByteTracker not initialized, using default config for 30 FPS');
+      const defaultConfig = getAdaptiveConfig(30); // Default to 30 FPS
+      byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
     }
     
     if (frameNumber === 213) {

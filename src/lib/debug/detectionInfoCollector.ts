@@ -3,6 +3,7 @@ import { PersonYOLODetector } from '@/lib/detection/person-yolo';
 import { ByteTrackInterpolator } from '@/lib/detection/bytetrack-interpolator';
 import JSZip from 'jszip';
 import { detectionConfig } from '@/config/detection';
+import { getAdaptiveConfig, getAdaptiveConfigDebugInfo } from '@/config/detection-adaptive';
 
 // Types for detection info
 interface DetectionInfo {
@@ -28,13 +29,9 @@ export async function collectDetectionInfo(
   detector.setConfidenceThreshold(confidenceThreshold);
   await detector.initialize();
   
-  const tracker = new ByteTrackInterpolator({
-    trackThresh: detectionConfig.byteTracker.trackThresh,
-    trackBuffer: detectionConfig.byteTracker.trackBuffer,
-    matchThresh: detectionConfig.byteTracker.matchThresh,
-    minBoxArea: detectionConfig.byteTracker.minBoxArea,
-    lowThresh: detectionConfig.byteTracker.lowThresh
-  });
+  // Use adaptive config based on video FPS
+  const adaptiveConfig = getAdaptiveConfig(metadata.fps);
+  const tracker = new ByteTrackInterpolator(adaptiveConfig.byteTracker);
   
   // Reset tracker to ensure fresh start
   tracker.reset();
@@ -170,6 +167,15 @@ export async function collectDetectionInfo(
   textContent += `Sample Interval: Every ${sampleInterval} frames (+ first and last frame)\n`;
   textContent += `Frames Analyzed: ${detectionInfoList.length}\n`;
   textContent += `Confidence Threshold: ${(confidenceThreshold * 100).toFixed(0)}%\n\n`;
+  
+  // Add adaptive config info
+  const configDebugInfo = getAdaptiveConfigDebugInfo(metadata.fps);
+  textContent += 'Adaptive ByteTracker Configuration:\n';
+  textContent += '-----------------------------------\n';
+  textContent += `Video FPS: ${configDebugInfo.videoFps}\n`;
+  textContent += `Effective FPS (after sampling): ${configDebugInfo.effectiveFps.toFixed(1)}\n`;
+  textContent += `Track Buffer: ${configDebugInfo.trackBufferFrames} frames (${configDebugInfo.trackBufferSeconds.toFixed(1)} seconds)\n`;
+  textContent += `Max Time Lost: ${configDebugInfo.maxTimeLostFrames} frames (${configDebugInfo.maxTimeLostSeconds.toFixed(1)} seconds)\n\n`;
   
   detectionInfoList.forEach(info => {
     textContent += `Frame ${info.frameNumber} (${info.timestamp.toFixed(3)}s):\n`;

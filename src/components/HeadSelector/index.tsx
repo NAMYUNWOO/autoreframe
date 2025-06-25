@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Detection, BoundingBox, ReframingConfig } from '@/types';
 import { REFRAMING_PRESETS } from '@/lib/reframing/presets';
 import { isDevelopment } from '@/lib/utils/env';
+import { getAdaptiveConfig } from '@/config/detection-adaptive';
 
 interface HeadSelectorProps {
   videoElement: HTMLVideoElement | null;
@@ -220,11 +221,13 @@ export function HeadSelector({
       // Always use ByteTracker for consistency
       // console.log('Applying ByteTracker...');
       const { ByteTracker } = await import('@/lib/detection/bytetrack-proper/byte-tracker');
+      
+      // Use adaptive config (default to 30 FPS for head selection)
+      const adaptiveConfig = getAdaptiveConfig(30);
       const byteTracker = new ByteTracker({
+        ...adaptiveConfig.byteTracker,
         trackThresh: confidenceThreshold,
-        trackBuffer: 30,
-        matchThresh: 0.8,
-        minBoxArea: 100,
+        matchThresh: 0.8, // Keep higher for head selection
         lowThresh: Math.max(0.1, confidenceThreshold * 0.5)
       });
       // console.log('HeadSelector: ByteTracker using threshold', confidenceThreshold);

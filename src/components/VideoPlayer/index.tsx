@@ -81,12 +81,18 @@ export function VideoPlayer({
     // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Get current frame number
-    const frameNumber = Math.floor(currentTime * metadata.fps);
+    // Get current frame number - read directly from video element for accuracy
+    const actualCurrentTime = videoElement.currentTime;
+    const frameNumber = Math.floor(actualCurrentTime * metadata.fps);
     
     // Draw detections
-    if (showDetections) {
-      const detection = detections.find(d => d.frameNumber === frameNumber);
+    if (showDetections && detections.length > 0) {
+      // Clamp frame number to valid range
+      const maxFrame = detections.length - 1;
+      const clampedFrame = Math.min(frameNumber, maxFrame);
+      
+      const detection = detections.find(d => d.frameNumber === clampedFrame);
+      
       if (detection) {
         detection.boxes.forEach(box => {
           // Set color based on track ID
@@ -237,7 +243,7 @@ export function VideoPlayer({
     if (isPlaying) {
       animationFrameRef.current = requestAnimationFrame(drawOverlay);
     }
-  }, [videoElement, metadata, detections, currentTransform, getFrameTransform, showDetections, showReframing, outputRatio, currentTime, isPlaying, reframingConfig, initialTargetBox]);
+  }, [videoElement, metadata, detections, currentTransform, getFrameTransform, showDetections, showReframing, outputRatio, isPlaying, reframingConfig, initialTargetBox]);
 
   useEffect(() => {
     drawOverlay();

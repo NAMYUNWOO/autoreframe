@@ -19,7 +19,7 @@ export class ReframingEngine {
   private frameTransforms: Map<number, FrameTransform> = new Map();
   private useMultiPointStabilization: boolean = false; // Disable for now
   private useTrajectorySmoothing: boolean = false; // Disable old trajectory smoothing
-  private useBezierSmoothing: boolean = true; // Use Bezier curve smoothing
+  private useBezierSmoothing: boolean = false; // Disable Bezier smoothing - causes anticipatory movement
   private initialTargetBox?: { width: number; height: number };
   
   constructor(config: ReframingConfig, initialTargetBox?: { width: number; height: number }) {
@@ -112,6 +112,11 @@ export class ReframingEngine {
     
     let rawTransform: FrameTransform;
     
+    // Debug: Check if we have valid targets
+    if (targets.length === 0) {
+      console.error(`Frame ${frameNumber}: No targets found for reframing!`);
+    }
+    
     // Use frame calculator
     rawTransform = this.frameCalculator.calculateOptimalFrame(
       targets,
@@ -198,6 +203,18 @@ export class ReframingEngine {
       for (let frameNumber = 0; frameNumber <= maxFrame; frameNumber++) {
         const detection = detectionMap.get(frameNumber);
         const boxes = detection ? detection.boxes : [];
+        
+        // Debug log to verify interpolated data
+        if (!detection) {
+          console.error(`Frame ${frameNumber}: No detection in map! This should not happen with interpolation.`);
+        } else if (boxes.length === 0) {
+          console.warn(`Frame ${frameNumber}: Detection exists but no boxes found`);
+        } else if (selectedTrack) {
+          const hasSelectedTrack = boxes.some(box => box.trackId === selectedTrack.id);
+          if (!hasSelectedTrack) {
+            console.warn(`Frame ${frameNumber}: Selected track ${selectedTrack.id} not found in detection`);
+          }
+        }
         
         // Process frame to get raw transform
         const rawTransform = this.processFrame(

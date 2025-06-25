@@ -1,4 +1,5 @@
 import { BoundingBox, FrameTransform, TrackedObject } from '@/types';
+import { OneEuroFilterTransform } from './one-euro-filter';
 
 export class SmoothingAlgorithm {
   private history: FrameTransform[] = [];
@@ -10,20 +11,37 @@ export class SmoothingAlgorithm {
   private maxAcceleration: number = 2; // Much lower for ByteTrack stability
   private useAggressiveSmoothing: boolean = false;
   private medianFilterSize: number = 5; // For outlier rejection
+  private smoothedPosition: { x: number; y: number; scale: number } | null = null;
+  private jitterThreshold: number = 3; // Pixels - movements smaller than this are considered jitter
+  private oneEuroFilter: OneEuroFilterTransform;
+  private useOneEuroFilter: boolean = true; // Use One Euro Filter by default
+  private frameTimestamp: number = 0;
 
   constructor(smoothingFactor: number = 0.8, useAggressiveSmoothing: boolean = false) {
     this.smoothingFactor = smoothingFactor;
     this.useAggressiveSmoothing = useAggressiveSmoothing;
     
     if (useAggressiveSmoothing) {
-      this.maxHistorySize = 90; // Even more history for ByteTrack
-      this.maxVelocity = 5; // Very conservative movement
-      this.maxAcceleration = 1; // Very smooth acceleration
-      this.medianFilterSize = 7; // Stronger outlier rejection
+      this.maxHistorySize = 30; // Reduced for faster response
+      this.maxVelocity = 15; // Allow faster movement
+      this.maxAcceleration = 5; // Allow quicker acceleration
+      this.medianFilterSize = 3; // Less aggressive outlier rejection
+      this.jitterThreshold = 5; // Larger deadzone for aggressive smoothing
     }
+    
+    // Initialize One Euro Filter with parameters tuned for camera tracking
+    this.oneEuroFilter = new OneEuroFilterTransform(
+      60,    // 60 FPS
+      1.0,   // minCutoff: Lower = more smoothing
+      0.007, // beta: Higher = less lag during fast movements
+      1.0    // dCutoff: Cutoff for derivative
+    );
   }
 
   smooth(currentTransform: FrameTransform): FrameTransform {
+    // Increment timestamp for One Euro Filter (assuming 60 FPS)
+    this.frameTimestamp += 1.0 / 60.0;
+    
     // If we don't have a valid transform (no detection), use prediction
     if (currentTransform.x === 0 && currentTransform.y === 0) {
       if (this.lastValidTransform && this.velocityHistory.length > 0) {
@@ -39,6 +57,23 @@ export class SmoothingAlgorithm {
       }
     } else {
       this.lastValidTransform = { ...currentTransform };
+    }
+    
+    // Use One Euro Filter if enabled
+    if (this.useOneEuroFilter && this.useAggressiveSmoothing) {
+      const filtered = this.oneEuroFilter.filter(
+        currentTransform.x,
+        currentTransform.y,
+        currentTransform.scale,
+        this.frameTimestamp
+      );
+      
+      return {
+        x: filtered.x,
+        y: filtered.y,
+        scale: filtered.scale,
+        rotation: 0
+      };
     }
 
     // Apply velocity constraints
@@ -122,7 +157,7 @@ export class SmoothingAlgorithm {
     }
     
     // Apply Kalman-filter-like smoothing
-    const windowSize = this.useAggressiveSmoothing ? Math.min(60, this.history.length) : Math.min(20, this.history.length);
+    const windowSize = this.useAggressiveSmoothing ? Math.min(10, this.history.length) : Math.min(20, this.history.length);
     
     if (this.useAggressiveSmoothing) {
       // Use Gaussian weighted average for ByteTrack
@@ -149,10 +184,41 @@ export class SmoothingAlgorithm {
       smoothedY /= totalWeight;
       smoothedScale /= totalWeight;
       
+      // Initialize smoothed position if not set
+      if (!this.smoothedPosition) {
+        this.smoothedPosition = { x: smoothedX, y: smoothedY, scale: smoothedScale };
+      }
+      
+      // Calculate movement from last smoothed position
+      const dx = currentTransform.x - this.smoothedPosition.x;
+      const dy = currentTransform.y - this.smoothedPosition.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Adaptive smoothing based on movement magnitude
+      let adaptiveCurrentWeight: number;
+      
+      if (distance < this.jitterThreshold) {
+        // Small movement - use heavy smoothing to reduce jitter
+        adaptiveCurrentWeight = 0.1;
+      } else if (distance > this.jitterThreshold * 10) {
+        // Large movement - respond quickly
+        adaptiveCurrentWeight = 0.8;
+      } else {
+        // Medium movement - normal smoothing
+        adaptiveCurrentWeight = 0.5;
+      }
+      
+      const adaptiveHistoryWeight = 1 - adaptiveCurrentWeight;
+      
+      // Update smoothed position
+      this.smoothedPosition.x = currentTransform.x * adaptiveCurrentWeight + smoothedX * adaptiveHistoryWeight;
+      this.smoothedPosition.y = currentTransform.y * adaptiveCurrentWeight + smoothedY * adaptiveHistoryWeight;
+      this.smoothedPosition.scale = currentTransform.scale * adaptiveCurrentWeight + smoothedScale * adaptiveHistoryWeight;
+      
       return {
-        x: smoothedX,
-        y: smoothedY,
-        scale: smoothedScale,
+        x: this.smoothedPosition.x,
+        y: this.smoothedPosition.y,
+        scale: this.smoothedPosition.scale,
         rotation: 0
       };
     } else {
@@ -178,10 +244,41 @@ export class SmoothingAlgorithm {
       smoothedY /= totalWeight;
       smoothedScale /= totalWeight;
       
+      // Initialize smoothed position if not set
+      if (!this.smoothedPosition) {
+        this.smoothedPosition = { x: smoothedX, y: smoothedY, scale: smoothedScale };
+      }
+      
+      // Calculate movement from last smoothed position
+      const dx = currentTransform.x - this.smoothedPosition.x;
+      const dy = currentTransform.y - this.smoothedPosition.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      
+      // Adaptive smoothing based on movement magnitude
+      let adaptiveCurrentWeight: number;
+      
+      if (distance < this.jitterThreshold) {
+        // Small movement - use heavy smoothing to reduce jitter
+        adaptiveCurrentWeight = 0.1;
+      } else if (distance > this.jitterThreshold * 10) {
+        // Large movement - respond quickly
+        adaptiveCurrentWeight = 0.8;
+      } else {
+        // Medium movement - normal smoothing
+        adaptiveCurrentWeight = 0.5;
+      }
+      
+      const adaptiveHistoryWeight = 1 - adaptiveCurrentWeight;
+      
+      // Update smoothed position
+      this.smoothedPosition.x = currentTransform.x * adaptiveCurrentWeight + smoothedX * adaptiveHistoryWeight;
+      this.smoothedPosition.y = currentTransform.y * adaptiveCurrentWeight + smoothedY * adaptiveHistoryWeight;
+      this.smoothedPosition.scale = currentTransform.scale * adaptiveCurrentWeight + smoothedScale * adaptiveHistoryWeight;
+      
       return {
-        x: smoothedX,
-        y: smoothedY,
-        scale: smoothedScale,
+        x: this.smoothedPosition.x,
+        y: this.smoothedPosition.y,
+        scale: this.smoothedPosition.scale,
         rotation: 0
       };
     }
@@ -191,6 +288,9 @@ export class SmoothingAlgorithm {
     this.history = [];
     this.lastValidTransform = null;
     this.velocityHistory = [];
+    this.smoothedPosition = null;
+    this.oneEuroFilter.reset();
+    this.frameTimestamp = 0;
   }
 }
 

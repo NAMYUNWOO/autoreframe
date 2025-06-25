@@ -85,7 +85,8 @@ export async function collectDetectionInfo(
         }
       } else {
         // For non-sample frames, get interpolated results
-        const allDetections = tracker.getAllDetections(metadata.fps);
+        const totalFrames = Math.ceil(metadata.duration * metadata.fps);
+        const allDetections = tracker.getAllDetections(totalFrames, metadata.fps);
         const interpolatedDetection = allDetections.find(d => d.frameNumber === frameNumber);
         
         if (interpolatedDetection) {

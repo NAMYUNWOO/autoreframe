@@ -121,7 +121,7 @@ export class ByteTracker {
     
     if (remainingTracks.length > 0 && lowDetections.length > 0) {
       const dists = iouDistance(remainingTracks, lowDetections);
-      const [matches2, uTrackIdx2, _] = linearAssignment(dists, this.params.secondMatchThresh);
+      const [matches2, uTrackIdx2, _] = linearAssignment(dists, this.params.secondMatchThresh ?? 0.5);
       
       for (const [itrack, idet] of matches2) {
         const track = remainingTracks[itrack];
@@ -154,7 +154,7 @@ export class ByteTracker {
       const dists = iouDistance(unconfirmedStracks, remainingHighDets);
       const [matches3, uUnconfirmedIdx, uDetIdx3] = linearAssignment(
         dists, 
-        this.params.unconfirmedMatchThresh
+        this.params.unconfirmedMatchThresh ?? 0.7
       );
       
       for (const [itrack, idet] of matches3) {
@@ -212,7 +212,7 @@ export class ByteTracker {
     /** Step 7: Update state */
     // Remove timeout lost tracks
     for (const track of this.lostStracks) {
-      if (frameNumber - track.frameId > this.params.maxTimeLost) {
+      if (frameNumber - track.frameId > (this.params.maxTimeLost ?? 30)) {
         track.markRemoved();
         removedStracks.push(track);
       }

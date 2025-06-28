@@ -167,29 +167,94 @@ export function useObjectDetection() {
     let processedFrames = 0;
     let detectionFrameCount = 0; // Count only frames where detection runs
     
-    // Collect frames for batch processing
-    const detectionTasks: FrameDetectionTask[] = [];
-    const frameDataMap = new Map<number, ImageData>();
-
+    // Check if mobile for progressive processing
+    const isMobileDevice = isMobile();
+    
     try {
-      // First pass: collect frames
-      await processFrames(async (imageData, frameNumber, timestamp) => {
-        processedFrames++;
-        frameDataMap.set(frameNumber, imageData);
+      if (isMobileDevice) {
+        // Mobile: Progressive processing in chunks
+        const CHUNK_SIZE = 30; // Process 30 frames at a time on mobile
+        console.log(`[Mobile] Progressive processing: ${totalFrames} frames in chunks of ${CHUNK_SIZE}`);
         
-        // Detect on first frame, last frame, and sample frames
-        const isFirstFrame = frameNumber === 0;
-        const isLastFrame = frameNumber === totalFrames - 1;
-        const isSampleFrame = frameNumber % sampleInterval === 0;
-        
-        if (isFirstFrame || isLastFrame || isSampleFrame) {
-          detectionTasks.push({ imageData, frameNumber, timestamp });
+        for (let chunkStart = 0; chunkStart < totalFrames; chunkStart += CHUNK_SIZE) {
+          const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, totalFrames);
+          const chunkDetectionTasks: FrameDetectionTask[] = [];
+          
+          console.log(`[Mobile] Processing chunk: frames ${chunkStart} to ${chunkEnd - 1}`);
+          
+          // Process only this chunk
+          let frameCount = 0;
+          await processFrames(async (imageData, frameNumber, timestamp) => {
+            // Skip frames outside current chunk
+            if (frameNumber < chunkStart || frameNumber >= chunkEnd) {
+              return;
+            }
+            
+            processedFrames++;
+            
+            // Detect on first frame, last frame, and sample frames
+            const isFirstFrame = frameNumber === 0;
+            const isLastFrame = frameNumber === totalFrames - 1;
+            const isSampleFrame = frameNumber % sampleInterval === 0;
+            
+            if (isFirstFrame || isLastFrame || isSampleFrame) {
+              chunkDetectionTasks.push({ imageData, frameNumber, timestamp });
+              
+              // Process detection immediately for mobile
+              if (!byteTrackerRef.current) {
+                const defaultConfig = getAdaptiveConfig(30);
+                byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
+              }
+              
+              const boxes = await detectorRef.current!.detect(imageData, frameNumber);
+              const detection = byteTrackerRef.current.processFrame(boxes, frameNumber, timestamp);
+              detectionFrameCount++;
+              
+              // Update UI periodically
+              if (frameNumber % 10 === 0 || frameNumber === totalFrames - 1) {
+                const currentDetections = byteTrackerRef.current!.getAllDetections(frameNumber + 1, metadata.fps);
+                setDetections(currentDetections);
+              }
+            }
+            
+            frameCount++;
+          });
+          
+          // Clean up after each chunk
+          console.log(`[Mobile] Chunk ${chunkStart}-${chunkEnd} completed, cleaning memory`);
+          
+          // Force garbage collection if available
+          if ((window as any).gc) {
+            (window as any).gc();
+          }
+          
+          // Small delay to allow memory cleanup
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
-      });
-      
-      // Second pass: process detections with parallel YOLO inference but sequential ByteTracker
-      const useParallel = enableParallel && secondDetectorRef.current && detectionTasks.length > 10 && !isMobile();
-      console.log(`Processing ${detectionTasks.length} detection tasks (parallel: ${useParallel})`);
+      } else {
+        // Desktop: Original batch processing
+        // Collect frames for batch processing
+        const detectionTasks: FrameDetectionTask[] = [];
+        const frameDataMap = new Map<number, ImageData>();
+        
+        // First pass: collect frames
+        await processFrames(async (imageData, frameNumber, timestamp) => {
+          processedFrames++;
+          frameDataMap.set(frameNumber, imageData);
+          
+          // Detect on first frame, last frame, and sample frames
+          const isFirstFrame = frameNumber === 0;
+          const isLastFrame = frameNumber === totalFrames - 1;
+          const isSampleFrame = frameNumber % sampleInterval === 0;
+          
+          if (isFirstFrame || isLastFrame || isSampleFrame) {
+            detectionTasks.push({ imageData, frameNumber, timestamp });
+          }
+        });
+        
+        // Second pass: process detections with parallel YOLO inference but sequential ByteTracker
+        const useParallel = enableParallel && secondDetectorRef.current && detectionTasks.length > 10 && !isMobile();
+        console.log(`Processing ${detectionTasks.length} detection tasks (parallel: ${useParallel})`);
       
       if (useParallel) {
         // First, run YOLO detection in parallel
@@ -382,6 +447,7 @@ export function useObjectDetection() {
           }
         }
       }
+      } // Close desktop processing block
 
       // Final interpolation for all frames
       console.log(`Getting all detections for ${totalFrames} frames...`);
@@ -455,11 +521,7 @@ export function useObjectDetection() {
       
       setDetections(allDetections);
       
-      // Mobile: Clear frame data map after all processing
-      if (isMobile()) {
-        console.log('Mobile: Clearing all frame data after processing');
-        frameDataMap.clear();
-      }
+      // Mobile: Memory already cleaned in chunks, no need for additional cleanup
       
       // Extract tracked objects from detections
       const finalTrackMap = new Map<string, TrackedObject>();

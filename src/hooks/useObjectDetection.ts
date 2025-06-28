@@ -176,48 +176,96 @@ export function useObjectDetection() {
         const CHUNK_SIZE = 30; // Process 30 frames at a time on mobile
         console.log(`[Mobile] Progressive processing: ${totalFrames} frames in chunks of ${CHUNK_SIZE}`);
         
+        // Create a custom frame processor that processes chunks
+        let globalFrameCounter = 0;
+        
         for (let chunkStart = 0; chunkStart < totalFrames; chunkStart += CHUNK_SIZE) {
           const chunkEnd = Math.min(chunkStart + CHUNK_SIZE, totalFrames);
-          const chunkDetectionTasks: FrameDetectionTask[] = [];
           
           console.log(`[Mobile] Processing chunk: frames ${chunkStart} to ${chunkEnd - 1}`);
           
-          // Process only this chunk
-          let frameCount = 0;
+          // Reset frame counter for processFrames
+          globalFrameCounter = 0;
+          
+          // Process frames but only handle current chunk
           await processFrames(async (imageData, frameNumber, timestamp) => {
+            // processFrames always starts from 0, so we need to track actual frame
+            const actualFrame = globalFrameCounter++;
+            
             // Skip frames outside current chunk
-            if (frameNumber < chunkStart || frameNumber >= chunkEnd) {
+            if (actualFrame < chunkStart || actualFrame >= chunkEnd) {
               return;
             }
             
             processedFrames++;
             
             // Detect on first frame, last frame, and sample frames
-            const isFirstFrame = frameNumber === 0;
-            const isLastFrame = frameNumber === totalFrames - 1;
-            const isSampleFrame = frameNumber % sampleInterval === 0;
+            const isFirstFrame = actualFrame === 0;
+            const isLastFrame = actualFrame === totalFrames - 1;
+            const isSampleFrame = actualFrame % sampleInterval === 0;
             
             if (isFirstFrame || isLastFrame || isSampleFrame) {
-              chunkDetectionTasks.push({ imageData, frameNumber, timestamp });
-              
               // Process detection immediately for mobile
               if (!byteTrackerRef.current) {
                 const defaultConfig = getAdaptiveConfig(30);
                 byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
               }
               
-              const boxes = await detectorRef.current!.detect(imageData, frameNumber);
-              const detection = byteTrackerRef.current.processFrame(boxes, frameNumber, timestamp);
+              const boxes = await detectorRef.current!.detect(imageData, actualFrame);
+              const detection = byteTrackerRef.current.processFrame(boxes, actualFrame, timestamp);
               detectionFrameCount++;
               
+              // Run head detection if needed (same as desktop)
+              if (useHeadDetection && headDetectorRef.current && detection.boxes.length > 0 && 
+                  (actualFrame === 0 || actualFrame === totalFrames - 1 || actualFrame % 5 === 0)) {
+                for (const box of detection.boxes) {
+                  try {
+                    const headResult = await headDetectorRef.current.detectHeadInBox(
+                      imageData,
+                      box,
+                      0.05
+                    );
+                    
+                    if (headResult) {
+                      box.headCenterX = headResult.x + headResult.width / 2;
+                      box.headCenterY = headResult.y + headResult.height / 2;
+                    } else {
+                      // Smart head position estimation
+                      const aspectRatio = box.width / box.height;
+                      if (aspectRatio > 1.5) {
+                        box.headCenterX = box.x + box.width * 0.15;
+                        box.headCenterY = box.y + box.height * 0.5;
+                      } else if (aspectRatio < 0.5) {
+                        box.headCenterX = box.x + box.width / 2;
+                        box.headCenterY = box.y + box.height * 0.15;
+                      } else {
+                        box.headCenterX = box.x + box.width / 2;
+                        box.headCenterY = box.y + box.height * 0.25;
+                      }
+                    }
+                  } catch (error) {
+                    // Fallback to estimation
+                    const aspectRatio = box.width / box.height;
+                    if (aspectRatio > 1.5) {
+                      box.headCenterX = box.x + box.width * 0.15;
+                      box.headCenterY = box.y + box.height * 0.5;
+                    } else if (aspectRatio < 0.5) {
+                      box.headCenterX = box.x + box.width / 2;
+                      box.headCenterY = box.y + box.height * 0.15;
+                    } else {
+                      box.headCenterX = box.x + box.width / 2;
+                      box.headCenterY = box.y + box.height * 0.25;
+                    }
+                  }
+                }
+              }
+              
               // Update UI periodically
-              if (frameNumber % 10 === 0 || frameNumber === totalFrames - 1) {
-                const currentDetections = byteTrackerRef.current!.getAllDetections(frameNumber + 1, metadata.fps);
+              if (actualFrame % 10 === 0 || actualFrame === totalFrames - 1) {
+                const currentDetections = byteTrackerRef.current!.getAllDetections(actualFrame + 1, metadata.fps);
                 setDetections(currentDetections);
               }
             }
-            
-            frameCount++;
           });
           
           // Clean up after each chunk
@@ -230,6 +278,11 @@ export function useObjectDetection() {
           
           // Small delay to allow memory cleanup
           await new Promise(resolve => setTimeout(resolve, 50));
+          
+          // Break if we've processed all frames to avoid re-processing
+          if (chunkEnd >= totalFrames) {
+            break;
+          }
         }
       } else {
         // Desktop: Original batch processing

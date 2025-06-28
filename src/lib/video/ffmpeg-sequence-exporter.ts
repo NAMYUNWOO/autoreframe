@@ -91,43 +91,81 @@ export class FFmpegSequenceExporter {
 
     // Extract frames as images with parallel processing
     const totalFrames = Math.floor(metadata.duration * metadata.fps);
-    console.log(`Extracting ${totalFrames} frames at ${metadata.fps} fps with parallel processing`);
+    
+    // Check if mobile device
+    const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+      navigator.userAgent.toLowerCase()
+    );
     
     // Determine batch size based on device capabilities
-    const batchSize = navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 8) : 4;
+    let batchSize: number;
+    if (isMobile) {
+      batchSize = 1; // Process frames sequentially on mobile
+      console.log(`Mobile device detected: Processing ${totalFrames} frames sequentially`);
+    } else {
+      batchSize = navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 8) : 4;
+      console.log(`Extracting ${totalFrames} frames at ${metadata.fps} fps with batch size ${batchSize}`);
+    }
+    
     const jpegQuality = options.quality === 15 ? 0.96 : 0.93; // Slightly reduced for performance
     
     // Process frames in batches
-    for (let batchStart = 0; batchStart < totalFrames; batchStart += batchSize) {
-      const batchEnd = Math.min(batchStart + batchSize, totalFrames);
-      const batchPromises: Promise<void>[] = [];
-      
-      // Process each frame in the batch
-      for (let frame = batchStart; frame < batchEnd; frame++) {
-        batchPromises.push(
-          this.processFrame(
-            frame,
-            totalFrames,
-            exportVideo,
-            transforms,
-            width,
-            height,
-            metadata,
-            options,
-            reframingConfig,
-            initialTargetBox,
-            jpegQuality
-          )
+    if (isMobile) {
+      // Mobile: Sequential processing with single video element
+      for (let frame = 0; frame < totalFrames; frame++) {
+        await this.processFrameMobile(
+          frame,
+          totalFrames,
+          exportVideo, // Reuse the same video element
+          transforms,
+          width,
+          height,
+          metadata,
+          options,
+          reframingConfig,
+          initialTargetBox,
+          jpegQuality
         );
+        
+        // Update progress
+        if (onProgress) {
+          const progress = ((frame + 1) / totalFrames) * 80; // 80% for frame extraction
+          onProgress(progress);
+        }
       }
-      
-      // Wait for all frames in batch to complete
-      await Promise.all(batchPromises);
-      
-      // Update progress
-      if (onProgress) {
-        const progress = (batchEnd / totalFrames) * 80; // 80% for frame extraction
-        onProgress(progress);
+    } else {
+      // Desktop: Parallel processing with multiple video elements
+      for (let batchStart = 0; batchStart < totalFrames; batchStart += batchSize) {
+        const batchEnd = Math.min(batchStart + batchSize, totalFrames);
+        const batchPromises: Promise<void>[] = [];
+        
+        // Process each frame in the batch
+        for (let frame = batchStart; frame < batchEnd; frame++) {
+          batchPromises.push(
+            this.processFrame(
+              frame,
+              totalFrames,
+              exportVideo,
+              transforms,
+              width,
+              height,
+              metadata,
+              options,
+              reframingConfig,
+              initialTargetBox,
+              jpegQuality
+            )
+          );
+        }
+        
+        // Wait for all frames in batch to complete
+        await Promise.all(batchPromises);
+        
+        // Update progress
+        if (onProgress) {
+          const progress = (batchEnd / totalFrames) * 80; // 80% for frame extraction
+          onProgress(progress);
+        }
       }
     }
 
@@ -302,6 +340,83 @@ export class FFmpegSequenceExporter {
     } finally {
       // Clean up resources
       frameVideo.remove();
+      frameCanvas.remove();
+    }
+  }
+
+  private async processFrameMobile(
+    frame: number,
+    totalFrames: number,
+    exportVideo: HTMLVideoElement,
+    transforms: Map<number, FrameTransform>,
+    width: number,
+    height: number,
+    metadata: VideoMetadata,
+    options: ExportOptions,
+    reframingConfig?: ReframingConfig,
+    initialTargetBox?: { width: number; height: number },
+    jpegQuality: number = 0.95
+  ): Promise<void> {
+    // Create a dedicated canvas for this frame
+    const frameCanvas = document.createElement('canvas');
+    frameCanvas.width = width;
+    frameCanvas.height = height;
+    const frameCtx = frameCanvas.getContext('2d', { alpha: false })!;
+    
+    try {
+      const time = frame / metadata.fps;
+      
+      // Reuse the existing video element - no need to create new one
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          console.warn(`Seek timeout for frame ${frame}`);
+          resolve(); // Continue even if seek fails
+        }, 5000);
+        
+        const onSeeked = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        
+        exportVideo.addEventListener('seeked', onSeeked, { once: true });
+        exportVideo.currentTime = time;
+      });
+      
+      // Draw the frame
+      const transform = transforms.get(frame);
+      if (!transform) {
+        frameCtx.fillStyle = 'black';
+        frameCtx.fillRect(0, 0, width, height);
+      } else {
+        this.applyTransform(
+          frameCtx,
+          exportVideo,
+          transform,
+          width,
+          height,
+          metadata,
+          reframingConfig,
+          initialTargetBox
+        );
+      }
+      
+      // Convert canvas to JPEG
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        frameCanvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error('Failed to create blob from canvas'));
+          }
+        }, 'image/jpeg', jpegQuality);
+      });
+      
+      const imageData = await fetchFile(blob);
+      const filename = `frame_${String(frame).padStart(5, '0')}.jpg`;
+      await this.ffmpeg.writeFile(filename, imageData);
+      
+    } finally {
+      // Clean up only the canvas, not the video
       frameCanvas.remove();
     }
   }

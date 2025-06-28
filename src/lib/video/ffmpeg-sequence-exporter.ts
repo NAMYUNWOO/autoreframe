@@ -1,5 +1,5 @@
 import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
+import { fetchFile } from '@ffmpeg/util';
 import { ExportOptions, FrameTransform, VideoMetadata, ReframingConfig } from '@/types';
 import { getOutputDimensions } from '../reframing/presets';
 import { ReframeSizeCalculatorV2 } from '../reframing/reframe-size-calculator-v2';
@@ -17,21 +17,19 @@ export class FFmpegSequenceExporter {
 
     const baseURL = '/ffmpeg';
     this.ffmpeg.on('log', ({ message }) => {
-      // console.log('[FFmpeg]', message);
+      console.log('[FFmpeg]', message);
     });
 
     try {
+      console.log('Loading FFmpeg from local files...');
       await this.ffmpeg.load({
         coreURL: `${baseURL}/ffmpeg-core.js`,
         wasmURL: `${baseURL}/ffmpeg-core.wasm`,
       });
+      console.log('FFmpeg loaded successfully from local files');
     } catch (error) {
-      // console.warn('Failed to load FFmpeg from local files, falling back to CDN');
-      const cdnURL = 'https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd';
-      await this.ffmpeg.load({
-        coreURL: await toBlobURL(`${cdnURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${cdnURL}/ffmpeg-core.wasm`, 'application/wasm'),
-      });
+      console.error('Failed to load FFmpeg from local files:', error);
+      throw new Error('Failed to load FFmpeg. Please ensure ffmpeg-core.js and ffmpeg-core.wasm are in the public/ffmpeg directory.');
     }
 
     this.loaded = true;

@@ -45,6 +45,11 @@ export class FFmpegSequenceExporter {
     reframingConfig?: ReframingConfig,
     initialTargetBox?: { width: number; height: number }
   ): Promise<Blob> {
+    console.log('[Export] Starting export process...');
+    console.log('[Export] Options:', options);
+    console.log('[Export] Video metadata:', metadata);
+    console.log('[Export] Transforms count:', transforms.size);
+    
     await this.load();
 
     const { width, height } = getOutputDimensions(
@@ -123,7 +128,13 @@ export class FFmpegSequenceExporter {
         height: metadata.height
       });
       
+      let lastProgressTime = Date.now();
+      let framesProcessedInLastSecond = 0;
+      const startTime = Date.now();
+      
       for (let frame = 0; frame < totalFrames; frame++) {
+        const frameStartTime = Date.now();
+        
         try {
           console.log(`[Mobile Export] Processing frame ${frame}/${totalFrames - 1}`);
           
@@ -141,10 +152,28 @@ export class FFmpegSequenceExporter {
             jpegQuality
           );
           
+          const frameEndTime = Date.now();
+          const frameProcessTime = frameEndTime - frameStartTime;
+          console.log(`[Mobile Export] Frame ${frame} processed in ${frameProcessTime}ms`);
+          
           // Update progress
           if (onProgress) {
             const progress = ((frame + 1) / totalFrames) * 80; // 80% for frame extraction
+            console.log(`[Mobile Export] Progress update: ${progress.toFixed(1)}%`);
             onProgress(progress);
+          }
+          
+          // Track performance
+          framesProcessedInLastSecond++;
+          const currentTime = Date.now();
+          if (currentTime - lastProgressTime > 1000) {
+            const totalElapsed = (currentTime - startTime) / 1000;
+            const fps = framesProcessedInLastSecond;
+            const remainingFrames = totalFrames - frame - 1;
+            const eta = remainingFrames / fps;
+            console.log(`[Mobile Export] Performance: ${fps} fps, Total elapsed: ${totalElapsed.toFixed(1)}s, ETA: ${eta.toFixed(1)}s`);
+            lastProgressTime = currentTime;
+            framesProcessedInLastSecond = 0;
           }
           
           // Log every 10 frames
@@ -195,7 +224,13 @@ export class FFmpegSequenceExporter {
     }
 
     // Set up progress monitoring for encoding
+    let lastEncodingLog = Date.now();
     this.ffmpeg.on('progress', ({ progress }) => {
+      const currentTime = Date.now();
+      if (currentTime - lastEncodingLog > 1000 || progress === 1) {
+        console.log(`[Export] FFmpeg encoding progress: ${(progress * 100).toFixed(1)}%`);
+        lastEncodingLog = currentTime;
+      }
       if (onProgress && typeof progress === 'number' && progress >= 0 && progress <= 1) {
         onProgress(80 + (progress * 20)); // Last 20% for encoding
       }
@@ -284,12 +319,26 @@ export class FFmpegSequenceExporter {
     // console.log('Output file size:', data.byteLength);
     
     // Clean up
+    console.log('[Export] Starting cleanup...');
+    const cleanupStartTime = Date.now();
+    
     for (let frame = 0; frame < totalFrames; frame++) {
       const filename = `frame_${String(frame).padStart(5, '0')}.jpg`;
       await this.ffmpeg.deleteFile(filename);
+      
+      if (frame % 50 === 0) {
+        console.log(`[Export] Cleaned up ${frame + 1}/${totalFrames} frame files`);
+      }
     }
+    
+    console.log('[Export] Deleting input file...');
     await this.ffmpeg.deleteFile(inputFile);
+    
+    console.log('[Export] Deleting output file...');
     await this.ffmpeg.deleteFile(outputFile);
+    
+    const cleanupTime = Date.now() - cleanupStartTime;
+    console.log(`[Export] Cleanup completed in ${cleanupTime}ms`);
 
     return new Blob([data], { type: mimeType });
   }

@@ -126,11 +126,10 @@ export class ReframingEngine {
           const centerY = frameHeight / 2;
           
           rawTransform = {
-            x: prevTransform.x * decayFactor + centerX * (1 - decayFactor) - frameWidth / 2,
-            y: prevTransform.y * decayFactor + centerY * (1 - decayFactor) - frameHeight / 2,
-            width: prevTransform.width,
-            height: prevTransform.height,
-            frameNumber: frameNumber
+            x: prevTransform.x * decayFactor + centerX * (1 - decayFactor),
+            y: prevTransform.y * decayFactor + centerY * (1 - decayFactor),
+            scale: prevTransform.scale,
+            rotation: prevTransform.rotation
           };
           
           const smoothedTransform = this.smoother.smooth(rawTransform);
@@ -146,7 +145,8 @@ export class ReframingEngine {
         width: frameWidth * 0.5,
         height: frameHeight * 0.5,
         confidence: 1,
-        class: 'person'
+        class: 'person',
+        classId: 0
       }];
     }
     

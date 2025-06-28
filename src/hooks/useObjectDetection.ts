@@ -473,7 +473,7 @@ export function useObjectDetection() {
     } finally {
       setIsProcessing(false);
     }
-  }, [isModelLoaded, detectFrame, targetDetection, useHeadDetection, useByteTrack, enableParallel]);
+  }, [isModelLoaded, targetDetection, useHeadDetection, useByteTrack, enableParallel]);
 
   const selectTrack = useCallback((trackId: string | null) => {
     setSelectedTrackId(trackId);

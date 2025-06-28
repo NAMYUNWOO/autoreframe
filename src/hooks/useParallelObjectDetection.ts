@@ -249,7 +249,7 @@ export function useParallelObjectDetection(maxConcurrency: number = 3) {
           let bestScore = 0;
           
           const tracks = Array.from(finalTrackMap.values());
-          tracks.forEach(track => {
+          tracks.forEach((track: TrackedObject) => {
             const trackBox = track.positions.get(targetDetection.frameNumber);
             if (trackBox) {
               const iou = calculateIoU(targetBox, trackBox);
@@ -260,9 +260,10 @@ export function useParallelObjectDetection(maxConcurrency: number = 3) {
             }
           });
           
-          if (bestTrack && bestScore > 0.5) {
-            setSelectedTrackId(bestTrack.id);
-            bestTrack.selected = true;
+          if (bestTrack !== null && bestScore > 0.5) {
+            const selectedTrack = bestTrack as TrackedObject;
+            setSelectedTrackId(selectedTrack.id);
+            selectedTrack.selected = true;
           }
         }
       }

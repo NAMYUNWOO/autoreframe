@@ -51,16 +51,19 @@ export class FFmpegSequenceExporter {
     console.log('[Export] Transforms count:', transforms.size);
     
     await this.load();
+    console.log('[Export] FFmpeg loaded, calculating dimensions...');
 
     const { width, height } = getOutputDimensions(
       metadata.width,
       metadata.height,
       outputRatio as any
     );
+    console.log(`[Export] Output dimensions: ${width}x${height}`);
     
     let inputFile: string;
 
     // Create canvas for frame extraction
+    console.log('[Export] Creating canvas...');
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -68,22 +71,46 @@ export class FFmpegSequenceExporter {
       alpha: false,
       willReadFrequently: true 
     })!;
+    console.log('[Export] Canvas created');
 
     // Create video element for frame extraction
+    console.log('[Export] Creating export video element...');
     const exportVideo = document.createElement('video');
     exportVideo.src = videoElement.src;
     exportVideo.muted = true;
     
-    await new Promise<void>((resolve) => {
-      exportVideo.onloadeddata = () => resolve();
+    console.log('[Export] Waiting for video to load...');
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        console.error('[Export] Video load timeout after 10 seconds');
+        reject(new Error('Video load timeout'));
+      }, 10000);
+      
+      exportVideo.onloadeddata = () => {
+        clearTimeout(timeout);
+        console.log('[Export] Video loaded successfully');
+        resolve();
+      };
+      
+      exportVideo.onerror = (e) => {
+        clearTimeout(timeout);
+        console.error('[Export] Video load error:', e);
+        reject(new Error('Video load error'));
+      };
     });
 
     // First, write the original video to FFmpeg for audio extraction
-    // console.log('Fetching video from:', videoElement.src);
-    const videoBlob = await fetch(videoElement.src).then(r => r.blob());
-    // console.log('Video blob size:', videoBlob.size, 'type:', videoBlob.type);
+    console.log('[Export] Fetching video blob from:', videoElement.src);
+    const fetchStartTime = Date.now();
+    const videoBlob = await fetch(videoElement.src).then(r => {
+      console.log(`[Export] Fetch completed in ${Date.now() - fetchStartTime}ms`);
+      return r.blob();
+    });
+    console.log(`[Export] Video blob size: ${videoBlob.size} bytes, type: ${videoBlob.type}`);
+    
+    console.log('[Export] Converting blob to FFmpeg data...');
     const videoData = await fetchFile(videoBlob);
-    // console.log('Video data size:', videoData.byteLength);
+    console.log(`[Export] Video data size: ${videoData.byteLength} bytes`);
     
     // Use appropriate extension based on MIME type
     const inputExt = videoBlob.type.includes('mp4') ? 'mp4' : 
@@ -91,11 +118,13 @@ export class FFmpegSequenceExporter {
                      videoBlob.type.includes('quicktime') ? 'mov' : 'mp4';
     inputFile = `original.${inputExt}`;
     
+    console.log(`[Export] Writing input file to FFmpeg: ${inputFile}`);
     await this.ffmpeg.writeFile(inputFile, videoData);
-    // console.log('Wrote input file:', inputFile);
+    console.log('[Export] Input file written successfully');
 
     // Extract frames as images with parallel processing
     const totalFrames = Math.floor(metadata.duration * metadata.fps);
+    console.log(`[Export] Total frames to process: ${totalFrames}`);
     
     // Check if mobile device
     const isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
@@ -104,6 +133,7 @@ export class FFmpegSequenceExporter {
     
     console.log(`[Export] Device type: ${isMobile ? 'Mobile' : 'Desktop'}`);
     console.log(`[Export] User Agent: ${navigator.userAgent}`);
+    console.log(`[Export] Starting frame extraction...`);
     
     // Determine batch size based on device capabilities
     let batchSize: number;

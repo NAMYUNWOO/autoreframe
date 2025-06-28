@@ -45,9 +45,16 @@ export function useObjectDetection() {
   const byteTrackerRef = useRef<ByteTrackInterpolator | null>(null);
   const headDetectorRef = useRef<HeadDetector | null>(null);
   
-  // For parallel processing
+  // Check if mobile device
+  const isMobile = useCallback(() => {
+    if (typeof window === 'undefined') return false;
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
+  }, []);
+  
+  // For parallel processing - disable on mobile
   const secondDetectorRef = useRef<PersonYOLODetector | null>(null);
-  const enableParallel = true;
+  const enableParallel = !isMobile();
 
   // Initialize detector
   useEffect(() => {
@@ -181,9 +188,10 @@ export function useObjectDetection() {
       });
       
       // Second pass: process detections with parallel YOLO inference but sequential ByteTracker
-      console.log(`Processing ${detectionTasks.length} detection tasks (parallel: ${enableParallel && secondDetectorRef.current && detectionTasks.length > 10})`);
+      const useParallel = enableParallel && secondDetectorRef.current && detectionTasks.length > 10 && !isMobile();
+      console.log(`Processing ${detectionTasks.length} detection tasks (parallel: ${useParallel})`);
       
-      if (enableParallel && secondDetectorRef.current && detectionTasks.length > 10) {
+      if (useParallel) {
         // First, run YOLO detection in parallel
         const yoloResults = new Map<number, BoundingBox[]>();
         
@@ -279,7 +287,10 @@ export function useObjectDetection() {
           }
         }
       } else {
-        // Sequential processing (fallback for small number of detection tasks)
+        // Sequential processing (fallback for small number of detection tasks or mobile)
+        const isMobileDevice = isMobile();
+        let processedCount = 0;
+        
         for (const task of detectionTasks) {
           if (!byteTrackerRef.current) {
             const defaultConfig = getAdaptiveConfig(30);
@@ -288,6 +299,11 @@ export function useObjectDetection() {
           
           const boxes = await detectorRef.current!.detect(task.imageData, task.frameNumber);
           const detection = byteTrackerRef.current.processFrame(boxes, task.frameNumber, task.timestamp);
+          
+          // Mobile: Delete frame data immediately after processing
+          if (isMobileDevice) {
+            frameDataMap.delete(task.frameNumber);
+          }
           detectionFrameCount++;
           
           // Head detection (same logic as parallel processing)
@@ -337,6 +353,32 @@ export function useObjectDetection() {
           if (task.frameNumber % 10 === 0 || task.frameNumber === totalFrames - 1) {
             const currentDetections = byteTrackerRef.current!.getAllDetections(Math.min(task.frameNumber + 1, totalFrames), metadata.fps);
             setDetections(currentDetections);
+          }
+          
+          // Mobile: Batch memory cleanup
+          if (isMobileDevice) {
+            processedCount++;
+            
+            // Every 5 detections, force garbage collection if available
+            if (processedCount % 5 === 0) {
+              console.log(`Mobile: Processed ${processedCount} detections, cleaning memory...`);
+              
+              // Clear any remaining old frame data
+              const currentFrame = task.frameNumber;
+              for (const [frame] of frameDataMap) {
+                if (frame < currentFrame - 5) {
+                  frameDataMap.delete(frame);
+                }
+              }
+              
+              // Force garbage collection if available
+              if ((window as any).gc) {
+                (window as any).gc();
+              }
+              
+              // Small delay to allow memory cleanup
+              await new Promise(resolve => setTimeout(resolve, 50));
+            }
           }
         }
       }
@@ -413,6 +455,12 @@ export function useObjectDetection() {
       
       setDetections(allDetections);
       
+      // Mobile: Clear frame data map after all processing
+      if (isMobile()) {
+        console.log('Mobile: Clearing all frame data after processing');
+        frameDataMap.clear();
+      }
+      
       // Extract tracked objects from detections
       const finalTrackMap = new Map<string, TrackedObject>();
       
@@ -473,7 +521,7 @@ export function useObjectDetection() {
     } finally {
       setIsProcessing(false);
     }
-  }, [isModelLoaded, targetDetection, useHeadDetection, useByteTrack, enableParallel]);
+  }, [isModelLoaded, targetDetection, useHeadDetection, useByteTrack, enableParallel, isMobile]);
 
   const selectTrack = useCallback((trackId: string | null) => {
     setSelectedTrackId(trackId);

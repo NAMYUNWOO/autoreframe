@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ExportOptions } from '@/types';
 
 interface ExportPanelProps {
@@ -10,6 +10,40 @@ interface ExportPanelProps {
   onCancel: () => void;
 }
 
+type QualityPreset = 'good' | 'better' | 'best';
+
+interface QualityOption {
+  preset: QualityPreset;
+  label: string;
+  description: string;
+  crf: number;
+  maxBitrate: number;
+}
+
+const qualityOptions: QualityOption[] = [
+  {
+    preset: 'good',
+    label: 'Good',
+    description: 'Smaller file · Quick sharing',
+    crf: 28,
+    maxBitrate: 2000000
+  },
+  {
+    preset: 'better',
+    label: 'Better',
+    description: 'Balanced · Most uses',
+    crf: 23,
+    maxBitrate: 5000000
+  },
+  {
+    preset: 'best',
+    label: 'Best',
+    description: 'Highest quality · Minimal loss',
+    crf: 15,  // Lowered from 18 for better quality
+    maxBitrate: 20000000  // Increased to 20 Mbps
+  }
+];
+
 export function ExportPanel({
   onExport,
   isExporting,
@@ -17,16 +51,28 @@ export function ExportPanel({
   onCancel,
   useFFmpegFallback = false
 }: ExportPanelProps & { useFFmpegFallback?: boolean }) {
-  const [options, setOptions] = useState<ExportOptions>({
-    format: 'mp4',
-    quality: 0.9,
-    codec: 'h264',
-    bitrate: 8000000
-  });
+  const [selectedQuality, setSelectedQuality] = useState<QualityPreset>('better');
+  const [exportingQuality, setExportingQuality] = useState<QualityPreset | null>(null);
 
   const handleExport = () => {
+    const selectedOption = qualityOptions.find(opt => opt.preset === selectedQuality)!;
+    const options: ExportOptions = {
+      format: 'mp4',
+      quality: selectedOption.crf,
+      codec: 'h264',
+      bitrate: selectedOption.maxBitrate
+    };
+    setExportingQuality(selectedQuality);
     onExport(options);
   };
+
+
+  // Reset exporting quality when export completes
+  useEffect(() => {
+    if (!isExporting) {
+      setExportingQuality(null);
+    }
+  }, [isExporting]);
 
   return (
     <div className="w-full">
@@ -34,35 +80,41 @@ export function ExportPanel({
       
       {!isExporting ? (
         <>
-          {/* Quality Slider */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-200 mb-2">
-              Quality: {(options.quality * 100).toFixed(0)}%
-            </label>
-            <input
-              type="range"
-              min="50"
-              max="100"
-              value={options.quality * 100}
-              onChange={(e) => setOptions({ ...options, quality: parseFloat(e.target.value) / 100 })}
-              className="w-full"
-            />
-          </div>
-
-          {/* Bitrate */}
+          {/* Quality Selection */}
           <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-200 mb-2">Bitrate</label>
-            <select
-              value={options.bitrate}
-              onChange={(e) => setOptions({ ...options, bitrate: parseInt(e.target.value) })}
-              className="w-full px-3 py-2 border border-gray-600 rounded-md 
-                         bg-gray-700 text-gray-100"
-            >
-              <option value="4000000">4 Mbps (Low)</option>
-              <option value="8000000">8 Mbps (Medium)</option>
-              <option value="12000000">12 Mbps (High)</option>
-              <option value="16000000">16 Mbps (Very High)</option>
-            </select>
+            <label className="block text-sm font-medium text-gray-200 mb-3">Quality</label>
+            <div className="space-y-2">
+              {qualityOptions.map((option) => (
+                <label
+                  key={option.preset}
+                  className={`block cursor-pointer rounded-lg border-2 p-4 transition-all ${
+                    selectedQuality === option.preset
+                      ? 'border-blue-500 bg-blue-500/10'
+                      : 'border-gray-600 hover:border-gray-500'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="quality"
+                    value={option.preset}
+                    checked={selectedQuality === option.preset}
+                    onChange={(e) => setSelectedQuality(e.target.value as QualityPreset)}
+                    className="sr-only"
+                  />
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white font-medium">{option.label}</p>
+                      <p className="text-sm text-gray-400">{option.description}</p>
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border-2 ${
+                      selectedQuality === option.preset
+                        ? 'border-blue-500 bg-blue-500'
+                        : 'border-gray-400'
+                    }`} />
+                  </div>
+                </label>
+              ))}
+            </div>
           </div>
 
           {/* Export Button */}

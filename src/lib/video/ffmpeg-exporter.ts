@@ -115,20 +115,47 @@ export class FFmpegExporter {
     });
 
     // Log info for debugging
-    // console.log(`Converting WebM to ${options.format}, Target FPS: ${metadata.fps}, Duration: ${metadata.duration}s`);
+    console.log('FFmpeg Export Options:', {
+      format: format,
+      crf: options.quality || 23,
+      bitrate: options.bitrate || 5000000,
+      fps: metadata.fps,
+      duration: metadata.duration
+    });
     
     // FFmpeg command with explicit duration and frame rate handling
+    const isLossless = options.quality === 0;
+    
     const ffmpegArgs = [
       '-i', 'input.webm',
       '-t', `${metadata.duration}`, // Explicitly set duration
+    ];
+
+    // Optimize encoding based on quality level
+    const isBestQuality = options.quality === 15;
+    
+    ffmpegArgs.push(
       '-c:v', 'libx264',
-      '-preset', 'medium',
-      '-crf', '15',
+      '-preset', isBestQuality ? 'slow' : 'medium',
+      '-crf', `${options.quality || 23}`,
       '-pix_fmt', 'yuv420p',
-      '-b:v', `${options.bitrate || 12000000}`,
+      '-profile:v', isBestQuality ? 'high' : 'main',
+      '-level', '4.1',
+      '-maxrate', `${options.bitrate || 5000000}`,
+      '-bufsize', `${(options.bitrate || 5000000) * 2}`
+    );
+    
+    // Additional quality optimization for best preset
+    if (isBestQuality) {
+      ffmpegArgs.push(
+        '-x264-params', 'aq-mode=3:aq-strength=0.8'
+      );
+    }
+
+    ffmpegArgs.push(
       '-r', `${metadata.fps}`, // Force output frame rate
       '-vsync', '1' // Duplicate/drop frames as needed to achieve constant frame rate
-    ];
+    );
 
     if (format === 'mov') {
       ffmpegArgs.push('-movflags', '+faststart');
@@ -138,6 +165,7 @@ export class FFmpegExporter {
 
     ffmpegArgs.push(outputFile);
     
+    console.log('FFmpeg command:', ffmpegArgs.join(' '));
     await this.ffmpeg.exec(ffmpegArgs);
 
     const data = await this.ffmpeg.readFile(outputFile);
@@ -179,7 +207,7 @@ export class FFmpegExporter {
     const stream = canvas.captureStream(fps);
     const recorder = new MediaRecorder(stream, {
       mimeType: 'video/webm;codecs=vp8',
-      videoBitsPerSecond: options.bitrate || 12000000
+      videoBitsPerSecond: options.bitrate || 5000000
     });
 
     const chunks: Blob[] = [];

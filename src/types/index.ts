@@ -57,9 +57,9 @@ export interface ProcessingStatus {
 
 export interface ExportOptions {
   format?: 'mp4' | 'webm' | 'mov'; // Optional, defaults to 'mp4'
-  quality: number;
+  quality: number; // CRF value (0-51, lower is better)
   codec: string;
-  bitrate?: number;
+  bitrate?: number; // Max bitrate in bits per second
 }
 
 export interface TrackedObject {

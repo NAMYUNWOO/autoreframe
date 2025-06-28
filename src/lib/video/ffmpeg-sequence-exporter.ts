@@ -91,62 +91,46 @@ export class FFmpegSequenceExporter {
     await this.ffmpeg.writeFile(inputFile, videoData);
     // console.log('Wrote input file:', inputFile);
 
-    // Extract frames as images
+    // Extract frames as images with parallel processing
     const totalFrames = Math.floor(metadata.duration * metadata.fps);
-    // console.log(`Extracting ${totalFrames} frames at ${metadata.fps} fps`);
+    console.log(`Extracting ${totalFrames} frames at ${metadata.fps} fps with parallel processing`);
     
-    for (let frame = 0; frame < totalFrames; frame++) {
-      const time = frame / metadata.fps;
-      exportVideo.currentTime = time;
-
-      await new Promise<void>((resolve) => {
-        exportVideo.onseeked = async () => {
-          const transform = transforms.get(frame);
-          if (!transform) {
-            ctx.fillStyle = 'black';
-            ctx.fillRect(0, 0, width, height);
-          } else {
-            this.applyTransform(
-              ctx,
-              exportVideo,
-              transform,
-              width,
-              height,
-              metadata,
-              reframingConfig,
-              initialTargetBox
-            );
-          }
-
-          // Convert canvas to image and write to FFmpeg
-          // Use higher quality for best preset
-          const jpegQuality = options.quality === 15 ? 0.98 : 0.95;
-          
-          const blob = await new Promise<Blob>((resolve, reject) => {
-            canvas.toBlob((blob) => {
-              if (blob) {
-                resolve(blob);
-              } else {
-                reject(new Error('Failed to create blob from canvas'));
-              }
-            }, 'image/jpeg', jpegQuality);
-          });
-          
-          const imageData = await fetchFile(blob);
-          const filename = `frame_${String(frame).padStart(5, '0')}.jpg`;
-          await this.ffmpeg.writeFile(filename, imageData);
-          
-          // if (frame === 0) {
-          //   console.log(`First frame saved: ${filename}, size: ${imageData.byteLength}`);
-          // }
-
-          if (onProgress) {
-            onProgress((frame / totalFrames) * 80); // 80% for frame extraction
-          }
-
-          resolve();
-        };
-      });
+    // Determine batch size based on device capabilities
+    const batchSize = navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 8) : 4;
+    const jpegQuality = options.quality === 15 ? 0.96 : 0.93; // Slightly reduced for performance
+    
+    // Process frames in batches
+    for (let batchStart = 0; batchStart < totalFrames; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize, totalFrames);
+      const batchPromises: Promise<void>[] = [];
+      
+      // Process each frame in the batch
+      for (let frame = batchStart; frame < batchEnd; frame++) {
+        batchPromises.push(
+          this.processFrame(
+            frame,
+            totalFrames,
+            exportVideo,
+            transforms,
+            width,
+            height,
+            metadata,
+            options,
+            reframingConfig,
+            initialTargetBox,
+            jpegQuality
+          )
+        );
+      }
+      
+      // Wait for all frames in batch to complete
+      await Promise.all(batchPromises);
+      
+      // Update progress
+      if (onProgress) {
+        const progress = (batchEnd / totalFrames) * 80; // 80% for frame extraction
+        onProgress(progress);
+      }
     }
 
     // Set up progress monitoring for encoding
@@ -184,11 +168,12 @@ export class FFmpegSequenceExporter {
     
     ffmpegArgs.push(
       '-c:v', 'libx264',
-      '-preset', isBestQuality ? 'slow' : 'medium',  // Use slow preset for best quality
+      '-preset', isBestQuality ? 'medium' : 'fast',  // Balanced speed/quality
       '-crf', `${options.quality || 23}`,
       '-pix_fmt', 'yuv420p',
       '-profile:v', isBestQuality ? 'high' : 'main',
-      '-level', '4.1'
+      '-level', '4.1',
+      '-threads', '0'  // Use all available threads
     );
     
     // Add rate control
@@ -197,11 +182,21 @@ export class FFmpegSequenceExporter {
       '-bufsize', `${(options.bitrate || 5000000) * 2}`
     );
     
-    // Additional quality optimization for best preset
+    // Additional optimization for all presets
+    ffmpegArgs.push(
+      '-tune', 'fastdecode',  // Optimize for faster decoding
+      '-movflags', '+faststart'  // Place moov atom at beginning
+    );
+    
     if (isBestQuality) {
       ffmpegArgs.push(
-        '-x264-params', 'aq-mode=3:aq-strength=0.8',  // Adaptive quantization for better quality
-        '-g', `${metadata.fps * 2}`  // GOP size for better seeking
+        '-x264-params', 'aq-mode=3:aq-strength=0.8:ref=3:bframes=2',
+        '-g', `${metadata.fps * 2}`
+      );
+    } else {
+      ffmpegArgs.push(
+        '-x264-params', 'ref=2:bframes=1',  // Fewer reference frames for speed
+        '-g', `${metadata.fps * 3}`  // Larger GOP for better compression
       );
     }
 
@@ -210,12 +205,6 @@ export class FFmpegSequenceExporter {
       '-shortest', // Match duration to shortest stream
       outputFile
     );
-
-    if (format === 'mov') {
-      ffmpegArgs.splice(-1, 0, '-movflags', '+faststart');
-    } else {
-      ffmpegArgs.splice(-1, 0, '-movflags', 'faststart');
-    }
 
     console.log('FFmpeg command:', ffmpegArgs.join(' '));
     
@@ -239,6 +228,84 @@ export class FFmpegSequenceExporter {
     await this.ffmpeg.deleteFile(outputFile);
 
     return new Blob([data], { type: mimeType });
+  }
+
+  private async processFrame(
+    frame: number,
+    totalFrames: number,
+    exportVideo: HTMLVideoElement,
+    transforms: Map<number, FrameTransform>,
+    width: number,
+    height: number,
+    metadata: VideoMetadata,
+    options: ExportOptions,
+    reframingConfig?: ReframingConfig,
+    initialTargetBox?: { width: number; height: number },
+    jpegQuality: number = 0.95
+  ): Promise<void> {
+    // Create a dedicated canvas for this frame
+    const frameCanvas = document.createElement('canvas');
+    frameCanvas.width = width;
+    frameCanvas.height = height;
+    const frameCtx = frameCanvas.getContext('2d', { alpha: false })!;
+    
+    // Create a dedicated video element for parallel processing
+    const frameVideo = document.createElement('video');
+    frameVideo.src = exportVideo.src;
+    frameVideo.muted = true;
+    
+    try {
+      // Wait for video to load
+      await new Promise<void>((resolve) => {
+        frameVideo.onloadeddata = () => resolve();
+      });
+      
+      const time = frame / metadata.fps;
+      frameVideo.currentTime = time;
+      
+      // Wait for seek to complete and process frame
+      await new Promise<void>((resolve) => {
+        frameVideo.onseeked = async () => {
+          const transform = transforms.get(frame);
+          if (!transform) {
+            frameCtx.fillStyle = 'black';
+            frameCtx.fillRect(0, 0, width, height);
+          } else {
+            this.applyTransform(
+              frameCtx,
+              frameVideo,
+              transform,
+              width,
+              height,
+              metadata,
+              reframingConfig,
+              initialTargetBox
+            );
+          }
+          
+          // Convert canvas to JPEG
+          const blob = await new Promise<Blob>((blobResolve, reject) => {
+            frameCanvas.toBlob((blob) => {
+              if (blob) {
+                blobResolve(blob);
+              } else {
+                reject(new Error('Failed to create blob from canvas'));
+              }
+            }, 'image/jpeg', jpegQuality);
+          });
+          
+          const imageData = await fetchFile(blob);
+          const filename = `frame_${String(frame).padStart(5, '0')}.jpg`;
+          await this.ffmpeg.writeFile(filename, imageData);
+          
+          resolve();
+        };
+      });
+    } finally {
+      // Clean up resources
+      frameVideo.remove();
+      frameCanvas.remove();
+    }
   }
 
   private applyTransform(

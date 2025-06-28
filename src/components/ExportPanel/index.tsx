@@ -51,7 +51,7 @@ export function ExportPanel({
   onCancel,
   useFFmpegFallback = false
 }: ExportPanelProps & { useFFmpegFallback?: boolean }) {
-  const [selectedQuality, setSelectedQuality] = useState<QualityPreset>('better');
+  const [selectedQuality, setSelectedQuality] = useState<QualityPreset>('good');
   const [exportingQuality, setExportingQuality] = useState<QualityPreset | null>(null);
 
   const handleExport = () => {

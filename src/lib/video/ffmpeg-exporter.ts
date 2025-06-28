@@ -102,8 +102,9 @@ export class FFmpegExporter {
       // This will fail but logs info about the input file
     }
 
-    const outputFile = options.format === 'mov' ? 'output.mov' : 'output.mp4';
-    const mimeType = options.format === 'mov' ? 'video/quicktime' : 'video/mp4';
+    const format = options.format || 'mp4'; // Default to mp4
+    const outputFile = format === 'mov' ? 'output.mov' : 'output.mp4';
+    const mimeType = format === 'mov' ? 'video/quicktime' : 'video/mp4';
 
     // Set up FFmpeg progress monitoring
     this.ffmpeg.on('progress', ({ progress }) => {
@@ -129,7 +130,7 @@ export class FFmpegExporter {
       '-vsync', '1' // Duplicate/drop frames as needed to achieve constant frame rate
     ];
 
-    if (options.format === 'mov') {
+    if (format === 'mov') {
       ffmpegArgs.push('-movflags', '+faststart');
     } else {
       ffmpegArgs.push('-movflags', 'faststart');

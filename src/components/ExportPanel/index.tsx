@@ -18,7 +18,7 @@ export function ExportPanel({
   useFFmpegFallback = false
 }: ExportPanelProps & { useFFmpegFallback?: boolean }) {
   const [options, setOptions] = useState<ExportOptions>({
-    format: 'mov',
+    format: 'mp4',
     quality: 0.9,
     codec: 'h264',
     bitrate: 8000000
@@ -34,21 +34,6 @@ export function ExportPanel({
       
       {!isExporting ? (
         <>
-          {/* Format Selection */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-200 mb-2">Format</label>
-            <select
-              value={options.format}
-              onChange={(e) => setOptions({ ...options, format: e.target.value as any })}
-              className="w-full px-3 py-2 border border-gray-600 rounded-md 
-                         bg-gray-700 text-gray-100"
-            >
-              <option value="mov">MOV (QuickTime)</option>
-              <option value="mp4">MP4 (H.264)</option>
-              <option value="webm">WebM (VP8)</option>
-            </select>
-          </div>
-
           {/* Quality Slider */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-200 mb-2">
@@ -89,17 +74,15 @@ export function ExportPanel({
             Export Video
           </button>
 
-          {/* FFmpeg Notice for MOV/MP4 */}
-          {(options.format === 'mov' || options.format === 'mp4') && (
-            <div className="mt-3 text-xs text-gray-400">
-              <p className="flex items-center">
-                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                High-quality export using FFmpeg (H.264 codec)
-              </p>
-            </div>
-          )}
+          {/* FFmpeg Notice */}
+          <div className="mt-3 text-xs text-gray-400">
+            <p className="flex items-center">
+              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              High-quality MP4 export using H.264 codec (compatible with all devices)
+            </p>
+          </div>
         </>
       ) : (
         <>

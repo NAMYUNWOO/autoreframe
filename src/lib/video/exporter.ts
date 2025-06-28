@@ -40,7 +40,8 @@ export class VideoExporter {
       try {
         // Set up MediaRecorder
         const stream = this.outputCanvas.captureStream(metadata.fps);
-        const mimeType = options.format === 'webm' 
+        const format = options.format || 'mp4'; // Default to mp4
+        const mimeType = format === 'webm' 
           ? 'video/webm;codecs=vp9' 
           : 'video/mp4';
         

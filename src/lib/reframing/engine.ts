@@ -114,7 +114,40 @@ export class ReframingEngine {
     
     // Debug: Check if we have valid targets
     if (targets.length === 0) {
-      console.error(`Frame ${frameNumber}: No targets found for reframing!`);
+      console.warn(`Frame ${frameNumber}: No targets found for reframing. Using previous frame transform or center view.`);
+      
+      // Try to use previous frame transform
+      if (frameNumber > 0) {
+        const prevTransform = this.frameTransforms.get(frameNumber - 1);
+        if (prevTransform) {
+          // Use previous transform with slight decay towards center
+          const decayFactor = 0.98;
+          const centerX = frameWidth / 2;
+          const centerY = frameHeight / 2;
+          
+          rawTransform = {
+            x: prevTransform.x * decayFactor + centerX * (1 - decayFactor) - frameWidth / 2,
+            y: prevTransform.y * decayFactor + centerY * (1 - decayFactor) - frameHeight / 2,
+            width: prevTransform.width,
+            height: prevTransform.height,
+            frameNumber: frameNumber
+          };
+          
+          const smoothedTransform = this.smoother.smooth(rawTransform);
+          this.frameTransforms.set(frameNumber, smoothedTransform);
+          return smoothedTransform;
+        }
+      }
+      
+      // Fallback to center view
+      targets = [{
+        x: frameWidth * 0.25,
+        y: frameHeight * 0.25,
+        width: frameWidth * 0.5,
+        height: frameHeight * 0.5,
+        confidence: 1,
+        class: 'person'
+      }];
     }
     
     // Use frame calculator

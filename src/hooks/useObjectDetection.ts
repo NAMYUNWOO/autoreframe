@@ -23,6 +23,12 @@ function calculateIoU(box1: BoundingBox, box2: BoundingBox): number {
   return union > 0 ? intersection / union : 0;
 }
 
+interface FrameDetectionTask {
+  imageData: ImageData;
+  frameNumber: number;
+  timestamp: number;
+}
+
 export function useObjectDetection() {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [detections, setDetections] = useState<Detection[]>([]);
@@ -38,6 +44,10 @@ export function useObjectDetection() {
   const detectorRef = useRef<PersonYOLODetector | null>(null);
   const byteTrackerRef = useRef<ByteTrackInterpolator | null>(null);
   const headDetectorRef = useRef<HeadDetector | null>(null);
+  
+  // For parallel processing
+  const secondDetectorRef = useRef<PersonYOLODetector | null>(null);
+  const enableParallel = true;
 
   // Initialize detector
   useEffect(() => {
@@ -49,6 +59,14 @@ export function useObjectDetection() {
         
         // Set initial confidence threshold to match UI default (30%)
         detectorRef.current.setConfidenceThreshold(0.3);
+        
+        // Initialize second detector for parallel processing
+        if (enableParallel) {
+          console.log('Initializing second detector for parallel processing...');
+          secondDetectorRef.current = new PersonYOLODetector();
+          await secondDetectorRef.current.initialize();
+          secondDetectorRef.current.setConfidenceThreshold(0.3);
+        }
         
         // Initialize head detector if head detection is enabled
         if (useHeadDetection) {
@@ -77,8 +95,11 @@ export function useObjectDetection() {
       if (headDetectorRef.current) {
         headDetectorRef.current.dispose();
       }
+      if (secondDetectorRef.current) {
+        secondDetectorRef.current.dispose();
+      }
     };
-  }, [useHeadDetection]);
+  }, [useHeadDetection, enableParallel]);
 
   // Initialize ByteTracker will be done when confidence threshold is set
 
@@ -97,21 +118,11 @@ export function useObjectDetection() {
     
     // Always use ByteTrack for consistency
     if (!byteTrackerRef.current) {
-      // console.warn('ByteTracker not initialized, using default config for 30 FPS');
-      const defaultConfig = getAdaptiveConfig(30); // Default to 30 FPS
+      const defaultConfig = getAdaptiveConfig(30);
       byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
     }
     
-    if (frameNumber === 213) {
-      // console.log(`Frame 213: Before ByteTracker - ${boxes.length} boxes from YOLO`);
-      boxes.forEach((box, i) => {
-        // console.log(`  YOLO box ${i}: confidence=${box.confidence}, class=${box.class}`);
-      });
-    }
-    
     const detection = byteTrackerRef.current.processFrame(boxes, frameNumber, timestamp);
-
-    // Don't run head detection here - it will be done selectively in processVideo
 
     return detection;
   }, [isModelLoaded]);
@@ -148,10 +159,16 @@ export function useObjectDetection() {
     const sampleInterval = detectionConfig.sampleInterval; // Use config value
     let processedFrames = 0;
     let detectionFrameCount = 0; // Count only frames where detection runs
+    
+    // Collect frames for batch processing
+    const detectionTasks: FrameDetectionTask[] = [];
+    const frameDataMap = new Map<number, ImageData>();
 
     try {
+      // First pass: collect frames
       await processFrames(async (imageData, frameNumber, timestamp) => {
         processedFrames++;
+        frameDataMap.set(frameNumber, imageData);
         
         // Detect on first frame, last frame, and sample frames
         const isFirstFrame = frameNumber === 0;
@@ -159,66 +176,88 @@ export function useObjectDetection() {
         const isSampleFrame = frameNumber % sampleInterval === 0;
         
         if (isFirstFrame || isLastFrame || isSampleFrame) {
-          if (frameNumber === 213) {
-            // console.log(`Frame 213: This is a sample frame, running detection`);
-          }
-          const detection = await detectFrame(imageData, frameNumber, timestamp, targetTrackId);
+          detectionTasks.push({ imageData, frameNumber, timestamp });
+        }
+      });
+      
+      // Second pass: process detections with parallel YOLO inference but sequential ByteTracker
+      console.log(`Processing ${detectionTasks.length} detection tasks (parallel: ${enableParallel && secondDetectorRef.current && detectionTasks.length > 10})`);
+      
+      if (enableParallel && secondDetectorRef.current && detectionTasks.length > 10) {
+        // First, run YOLO detection in parallel
+        const yoloResults = new Map<number, BoundingBox[]>();
+        
+        // Split tasks for parallel YOLO processing
+        const midPoint = Math.floor(detectionTasks.length / 2);
+        const firstHalf = detectionTasks.slice(0, midPoint);
+        const secondHalf = detectionTasks.slice(midPoint);
+        
+        await Promise.all([
+          // First half with primary detector
+          (async () => {
+            for (const task of firstHalf) {
+              const detector = detectorRef.current!;
+              const boxes = await detector.detect(task.imageData, task.frameNumber);
+              yoloResults.set(task.frameNumber, boxes);
+            }
+          })(),
+          // Second half with secondary detector
+          (async () => {
+            for (const task of secondHalf) {
+              const detector = secondDetectorRef.current!;
+              const boxes = await detector.detect(task.imageData, task.frameNumber);
+              yoloResults.set(task.frameNumber, boxes);
+            }
+          })()
+        ]);
+        
+        // Then, process ByteTracker sequentially to maintain temporal consistency
+        for (const task of detectionTasks) {
+          const boxes = yoloResults.get(task.frameNumber)!;
           
-          // Run head detection only on key frames: first, last, and every 5 frames
+          if (!byteTrackerRef.current) {
+            const defaultConfig = getAdaptiveConfig(30);
+            byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
+          }
+          
+          const detection = byteTrackerRef.current.processFrame(boxes, task.frameNumber, task.timestamp);
+          detectionFrameCount++;
+          
+          // Run head detection if needed
           if (useHeadDetection && headDetectorRef.current && detection.boxes.length > 0 && 
-              (isFirstFrame || isLastFrame || frameNumber % 5 === 0)) {
-            // console.log(`Running head detection for frame ${frameNumber} with ${detection.boxes.length} persons`);
-            
+              (task.frameNumber === 0 || task.frameNumber === totalFrames - 1 || task.frameNumber % 5 === 0)) {
             for (const box of detection.boxes) {
               try {
                 const headResult = await headDetectorRef.current.detectHeadInBox(
-                  imageData,
+                  task.imageData,
                   box,
-                  0.05 // 5% padding
+                  0.05
                 );
                 
                 if (headResult) {
                   box.headCenterX = headResult.x + headResult.width / 2;
                   box.headCenterY = headResult.y + headResult.height / 2;
-                  // console.log(`Frame ${frameNumber}: Head detected for track ${box.trackId} at (${box.headCenterX}, ${box.headCenterY})`);
                 } else {
-                  // Smart head position estimation based on aspect ratio and pose
+                  // Smart head position estimation
                   const aspectRatio = box.width / box.height;
                   if (aspectRatio > 1.5) {
-                    // Wide box - person likely horizontal (like figure skating)
-                    // For figure skating, head is usually at one of the ends
-                    // We'll check which end based on the frame context
-                    // For now, assume head is at the higher end (top of image)
-                    if (box.y < box.y + box.height / 2) {
-                      // Top part of box is higher, head likely on left
-                      box.headCenterX = box.x + box.width * 0.15;
-                      box.headCenterY = box.y + box.height * 0.5;
-                    } else {
-                      // Head likely on right
-                      box.headCenterX = box.x + box.width * 0.85;
-                      box.headCenterY = box.y + box.height * 0.5;
-                    }
+                    box.headCenterX = box.x + box.width * 0.15;
+                    box.headCenterY = box.y + box.height * 0.5;
                   } else if (aspectRatio < 0.5) {
-                    // Very tall box - person standing upright
                     box.headCenterX = box.x + box.width / 2;
                     box.headCenterY = box.y + box.height * 0.15;
                   } else {
-                    // Normal standing pose
                     box.headCenterX = box.x + box.width / 2;
                     box.headCenterY = box.y + box.height * 0.25;
                   }
-                  // console.log(`Frame ${frameNumber}: Head estimated (no detection) for track ${box.trackId} at (${box.headCenterX}, ${box.headCenterY}), aspect ratio: ${aspectRatio.toFixed(2)})`);
                 }
               } catch (error) {
-                // console.error(`Head detection failed for frame ${frameNumber}, track ${box.trackId}:`, error);
                 // Fallback to estimation
                 const aspectRatio = box.width / box.height;
                 if (aspectRatio > 1.5) {
-                  // Wide box - horizontal pose
                   box.headCenterX = box.x + box.width * 0.15;
                   box.headCenterY = box.y + box.height * 0.5;
                 } else if (aspectRatio < 0.5) {
-                  // Very tall box - upright
                   box.headCenterX = box.x + box.width / 2;
                   box.headCenterY = box.y + box.height * 0.15;
                 } else {
@@ -229,55 +268,86 @@ export function useObjectDetection() {
             }
           }
           
-          // ByteTrack handles its own interpolation
-        } else {
-          // For non-sample frames, don't call ByteTracker
-          // This maintains temporal consistency by only updating on frames with actual detections
-          
           // Update UI periodically
-          if (frameNumber % 10 === 0 || isLastFrame) {
-            let currentDetections: Detection[];
-            
-            // Get all detections with interpolation from ByteTrackInterpolator
-            currentDetections = byteTrackerRef.current!.getAllDetections(processedFrames, metadata.fps);
-            // Head centers are already set by detectFrame for key frames
-            
+          if (task.frameNumber % 30 === 0 || task.frameNumber === totalFrames - 1) {
+            const currentDetections = byteTrackerRef.current!.getAllDetections(Math.min(task.frameNumber + 1, totalFrames), metadata.fps);
             setDetections(currentDetections);
             
-            // Extract tracked objects from detections
-            const trackMap = new Map<string, TrackedObject>();
-            
-            currentDetections.forEach((detection) => {
-              detection.boxes.forEach((box) => {
-                if (box.trackId) {
-                  if (!trackMap.has(box.trackId)) {
-                    trackMap.set(box.trackId, {
-                      id: box.trackId,
-                      firstFrame: detection.frameNumber,
-                      lastFrame: detection.frameNumber,
-                      positions: new Map(),
-                      label: box.class,
-                      selected: false
-                    });
-                  }
-                  
-                  const track = trackMap.get(box.trackId)!;
-                  track.lastFrame = detection.frameNumber;
-                  track.positions.set(detection.frameNumber, box);
-                }
-              });
-            });
-            
-            setTrackedObjects(Array.from(trackMap.values()));
+            // Debug log
+            const trackCount = new Set(currentDetections.flatMap(d => d.boxes.map(b => b.trackId)).filter(id => id !== undefined)).size;
+            console.log(`Frame ${task.frameNumber}: ${currentDetections.length} detections, ${trackCount} tracks`);
           }
         }
-      });
+      } else {
+        // Sequential processing (fallback for small number of detection tasks)
+        for (const task of detectionTasks) {
+          if (!byteTrackerRef.current) {
+            const defaultConfig = getAdaptiveConfig(30);
+            byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
+          }
+          
+          const boxes = await detectorRef.current!.detect(task.imageData, task.frameNumber);
+          const detection = byteTrackerRef.current.processFrame(boxes, task.frameNumber, task.timestamp);
+          detectionFrameCount++;
+          
+          // Head detection (same logic as parallel processing)
+          if (useHeadDetection && headDetectorRef.current && detection.boxes.length > 0 && 
+              (task.frameNumber === 0 || task.frameNumber === totalFrames - 1 || task.frameNumber % 5 === 0)) {
+            for (const box of detection.boxes) {
+              try {
+                const headResult = await headDetectorRef.current.detectHeadInBox(
+                  task.imageData,
+                  box,
+                  0.05
+                );
+                
+                if (headResult) {
+                  box.headCenterX = headResult.x + headResult.width / 2;
+                  box.headCenterY = headResult.y + headResult.height / 2;
+                } else {
+                  const aspectRatio = box.width / box.height;
+                  if (aspectRatio > 1.5) {
+                    box.headCenterX = box.x + box.width * 0.15;
+                    box.headCenterY = box.y + box.height * 0.5;
+                  } else if (aspectRatio < 0.5) {
+                    box.headCenterX = box.x + box.width / 2;
+                    box.headCenterY = box.y + box.height * 0.15;
+                  } else {
+                    box.headCenterX = box.x + box.width / 2;
+                    box.headCenterY = box.y + box.height * 0.25;
+                  }
+                }
+              } catch (error) {
+                const aspectRatio = box.width / box.height;
+                if (aspectRatio > 1.5) {
+                  box.headCenterX = box.x + box.width * 0.15;
+                  box.headCenterY = box.y + box.height * 0.5;
+                } else if (aspectRatio < 0.5) {
+                  box.headCenterX = box.x + box.width / 2;
+                  box.headCenterY = box.y + box.height * 0.15;
+                } else {
+                  box.headCenterX = box.x + box.width / 2;
+                  box.headCenterY = box.y + box.height * 0.25;
+                }
+              }
+            }
+          }
+          
+          // UI update (same logic as parallel processing)
+          if (task.frameNumber % 10 === 0 || task.frameNumber === totalFrames - 1) {
+            const currentDetections = byteTrackerRef.current!.getAllDetections(Math.min(task.frameNumber + 1, totalFrames), metadata.fps);
+            setDetections(currentDetections);
+          }
+        }
+      }
 
       // Final interpolation for all frames
+      console.log(`Getting all detections for ${totalFrames} frames...`);
       let allDetections: Detection[];
       
       // Get all detections with interpolation from ByteTrackInterpolator
       allDetections = byteTrackerRef.current!.getAllDetections(totalFrames, metadata.fps);
+      console.log(`Total detections after interpolation: ${allDetections.length}`);
       // Head centers are already set by detectFrame for key frames
       // For interpolated frames, we need to interpolate head positions
       
@@ -403,7 +473,7 @@ export function useObjectDetection() {
     } finally {
       setIsProcessing(false);
     }
-  }, [isModelLoaded, detectFrame, targetDetection, useHeadDetection, useByteTrack]);
+  }, [isModelLoaded, detectFrame, targetDetection, useHeadDetection, useByteTrack, enableParallel]);
 
   const selectTrack = useCallback((trackId: string | null) => {
     setSelectedTrackId(trackId);
@@ -426,6 +496,10 @@ export function useObjectDetection() {
     if (detectorRef.current) {
       detectorRef.current.setConfidenceThreshold(threshold);
       // console.log(`PersonYOLODetector threshold set to ${threshold}`);
+    }
+    
+    if (secondDetectorRef.current) {
+      secondDetectorRef.current.setConfidenceThreshold(threshold);
     }
     
     // Also update ByteTracker thresholds

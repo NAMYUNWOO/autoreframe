@@ -75,16 +75,39 @@ export class FFmpegSequenceExporter {
 
     // Create video element for frame extraction
     console.log('[Export] Creating export video element...');
+    
+    // On mobile, pause the main video to release resources
+    const isMobileCheck = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
+      navigator.userAgent.toLowerCase()
+    );
+    
+    if (isMobileCheck) {
+      console.log('[Export] Mobile detected: Pausing main video to release resources...');
+      videoElement.pause();
+      // Small delay to ensure resources are released
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
     const exportVideo = document.createElement('video');
     exportVideo.src = videoElement.src;
     exportVideo.muted = true;
+    exportVideo.playsInline = true; // Important for mobile
+    exportVideo.preload = 'auto';
     
     console.log('[Export] Waiting for video to load...');
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
-        console.error('[Export] Video load timeout after 10 seconds');
-        reject(new Error('Video load timeout'));
-      }, 10000);
+        console.error('[Export] Video load timeout after 15 seconds');
+        console.log('[Export] Attempting recovery...');
+        
+        // Try to recover by using the existing video element directly
+        if (videoElement.readyState >= 3) {
+          console.log('[Export] Using existing video element instead');
+          resolve();
+        } else {
+          reject(new Error('Video load timeout'));
+        }
+      }, 15000); // Increased timeout for mobile
       
       exportVideo.onloadeddata = () => {
         clearTimeout(timeout);
@@ -97,6 +120,11 @@ export class FFmpegSequenceExporter {
         console.error('[Export] Video load error:', e);
         reject(new Error('Video load error'));
       };
+      
+      // Try to force load on mobile
+      if (isMobileCheck) {
+        exportVideo.load();
+      }
     });
 
     // First, write the original video to FFmpeg for audio extraction
@@ -158,6 +186,10 @@ export class FFmpegSequenceExporter {
         height: metadata.height
       });
       
+      // On mobile, use the original video element if export video failed to load
+      const videoToUse = exportVideo.readyState >= 3 ? exportVideo : videoElement;
+      console.log(`[Mobile Export] Using ${videoToUse === videoElement ? 'original' : 'export'} video element (readyState: ${videoToUse.readyState})`);
+      
       let lastProgressTime = Date.now();
       let framesProcessedInLastSecond = 0;
       const startTime = Date.now();
@@ -171,7 +203,7 @@ export class FFmpegSequenceExporter {
           await this.processFrameMobile(
             frame,
             totalFrames,
-            exportVideo, // Reuse the same video element
+            videoToUse, // Use the working video element
             transforms,
             width,
             height,

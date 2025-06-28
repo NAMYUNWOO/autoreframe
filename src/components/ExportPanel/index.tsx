@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { ExportOptions } from '@/types';
+import { consoleLogger } from '@/lib/utils/console-logger';
 
 interface ExportPanelProps {
   onExport: (options: ExportOptions) => Promise<void>;
@@ -124,6 +125,21 @@ export function ExportPanel({
                        hover:bg-blue-600 transition-colors"
           >
             Export Video
+          </button>
+
+          {/* Download Console Logs Button */}
+          <button
+            onClick={() => {
+              const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, -5);
+              consoleLogger.downloadLogs(`console-logs-${timestamp}.txt`);
+            }}
+            className="w-full mt-2 py-2 px-4 bg-gray-600 text-white text-sm rounded-md
+                       hover:bg-gray-700 transition-colors flex items-center justify-center"
+          >
+            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+            </svg>
+            Download Console Logs
           </button>
 
           {/* FFmpeg Notice */}

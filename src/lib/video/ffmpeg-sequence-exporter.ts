@@ -97,14 +97,17 @@ export class FFmpegSequenceExporter {
       navigator.userAgent.toLowerCase()
     );
     
+    console.log(`[Export] Device type: ${isMobile ? 'Mobile' : 'Desktop'}`);
+    console.log(`[Export] User Agent: ${navigator.userAgent}`);
+    
     // Determine batch size based on device capabilities
     let batchSize: number;
     if (isMobile) {
       batchSize = 1; // Process frames sequentially on mobile
-      console.log(`Mobile device detected: Processing ${totalFrames} frames sequentially`);
+      console.log(`[Export] Mobile device detected: Processing ${totalFrames} frames sequentially`);
     } else {
       batchSize = navigator.hardwareConcurrency ? Math.min(navigator.hardwareConcurrency, 8) : 4;
-      console.log(`Extracting ${totalFrames} frames at ${metadata.fps} fps with batch size ${batchSize}`);
+      console.log(`[Export] Extracting ${totalFrames} frames at ${metadata.fps} fps with batch size ${batchSize}`);
     }
     
     const jpegQuality = options.quality === 15 ? 0.96 : 0.93; // Slightly reduced for performance
@@ -112,27 +115,49 @@ export class FFmpegSequenceExporter {
     // Process frames in batches
     if (isMobile) {
       // Mobile: Sequential processing with single video element
+      console.log(`[Mobile Export] Starting sequential processing for ${totalFrames} frames`);
+      console.log(`[Mobile Export] Video metadata:`, {
+        duration: metadata.duration,
+        fps: metadata.fps,
+        width: metadata.width,
+        height: metadata.height
+      });
+      
       for (let frame = 0; frame < totalFrames; frame++) {
-        await this.processFrameMobile(
-          frame,
-          totalFrames,
-          exportVideo, // Reuse the same video element
-          transforms,
-          width,
-          height,
-          metadata,
-          options,
-          reframingConfig,
-          initialTargetBox,
-          jpegQuality
-        );
-        
-        // Update progress
-        if (onProgress) {
-          const progress = ((frame + 1) / totalFrames) * 80; // 80% for frame extraction
-          onProgress(progress);
+        try {
+          console.log(`[Mobile Export] Processing frame ${frame}/${totalFrames - 1}`);
+          
+          await this.processFrameMobile(
+            frame,
+            totalFrames,
+            exportVideo, // Reuse the same video element
+            transforms,
+            width,
+            height,
+            metadata,
+            options,
+            reframingConfig,
+            initialTargetBox,
+            jpegQuality
+          );
+          
+          // Update progress
+          if (onProgress) {
+            const progress = ((frame + 1) / totalFrames) * 80; // 80% for frame extraction
+            onProgress(progress);
+          }
+          
+          // Log every 10 frames
+          if (frame > 0 && frame % 10 === 0) {
+            console.log(`[Mobile Export] Progress: ${frame}/${totalFrames} frames completed (${((frame / totalFrames) * 100).toFixed(1)}%)`);
+          }
+        } catch (error) {
+          console.error(`[Mobile Export] Failed at frame ${frame}:`, error);
+          throw error;
         }
       }
+      
+      console.log(`[Mobile Export] All frames processed successfully`);
     } else {
       // Desktop: Parallel processing with multiple video elements
       for (let batchStart = 0; batchStart < totalFrames; batchStart += batchSize) {
@@ -242,12 +267,15 @@ export class FFmpegSequenceExporter {
       outputFile
     );
 
-    console.log('FFmpeg command:', ffmpegArgs.join(' '));
+    console.log('[Export] FFmpeg command:', ffmpegArgs.join(' '));
+    console.log('[Export] Starting FFmpeg encoding...');
     
     try {
+      const encodeStartTime = Date.now();
       await this.ffmpeg.exec(ffmpegArgs);
+      console.log(`[Export] FFmpeg encoding completed in ${Date.now() - encodeStartTime}ms`);
     } catch (error) {
-      // console.error('FFmpeg execution failed:', error);
+      console.error('[Export] FFmpeg execution failed:', error);
       throw error;
     }
 
@@ -357,6 +385,8 @@ export class FFmpegSequenceExporter {
     initialTargetBox?: { width: number; height: number },
     jpegQuality: number = 0.95
   ): Promise<void> {
+    console.log(`[Mobile Frame ${frame}] Starting processing`);
+    
     // Create a dedicated canvas for this frame
     const frameCanvas = document.createElement('canvas');
     frameCanvas.width = width;
@@ -365,29 +395,61 @@ export class FFmpegSequenceExporter {
     
     try {
       const time = frame / metadata.fps;
+      console.log(`[Mobile Frame ${frame}] Target time: ${time.toFixed(3)}s`);
+      
+      // Check video state before seeking
+      console.log(`[Mobile Frame ${frame}] Video state before seek:`, {
+        currentTime: exportVideo.currentTime,
+        readyState: exportVideo.readyState,
+        paused: exportVideo.paused,
+        ended: exportVideo.ended,
+        src: exportVideo.src.substring(0, 50) + '...'
+      });
       
       // Reuse the existing video element - no need to create new one
       await new Promise<void>((resolve, reject) => {
+        const seekStartTime = Date.now();
         const timeout = setTimeout(() => {
-          console.warn(`Seek timeout for frame ${frame}`);
+          const elapsed = Date.now() - seekStartTime;
+          console.warn(`[Mobile Frame ${frame}] Seek timeout after ${elapsed}ms`);
+          console.log(`[Mobile Frame ${frame}] Video state at timeout:`, {
+            currentTime: exportVideo.currentTime,
+            readyState: exportVideo.readyState
+          });
           resolve(); // Continue even if seek fails
         }, 5000);
         
         const onSeeked = () => {
           clearTimeout(timeout);
+          const elapsed = Date.now() - seekStartTime;
+          console.log(`[Mobile Frame ${frame}] Seek completed in ${elapsed}ms`);
           resolve();
         };
         
+        const onError = (e: Event) => {
+          clearTimeout(timeout);
+          console.error(`[Mobile Frame ${frame}] Video error:`, e);
+          resolve(); // Continue anyway
+        };
+        
         exportVideo.addEventListener('seeked', onSeeked, { once: true });
+        exportVideo.addEventListener('error', onError, { once: true });
         exportVideo.currentTime = time;
       });
       
       // Draw the frame
+      console.log(`[Mobile Frame ${frame}] Drawing frame to canvas`);
       const transform = transforms.get(frame);
       if (!transform) {
+        console.log(`[Mobile Frame ${frame}] No transform found, filling with black`);
         frameCtx.fillStyle = 'black';
         frameCtx.fillRect(0, 0, width, height);
       } else {
+        console.log(`[Mobile Frame ${frame}] Applying transform:`, {
+          x: transform.x,
+          y: transform.y,
+          scale: transform.scale
+        });
         this.applyTransform(
           frameCtx,
           exportVideo,
@@ -401,22 +463,36 @@ export class FFmpegSequenceExporter {
       }
       
       // Convert canvas to JPEG
+      console.log(`[Mobile Frame ${frame}] Converting canvas to JPEG`);
+      const blobStartTime = Date.now();
       const blob = await new Promise<Blob>((resolve, reject) => {
         frameCanvas.toBlob((blob) => {
           if (blob) {
+            const elapsed = Date.now() - blobStartTime;
+            console.log(`[Mobile Frame ${frame}] Canvas to blob completed in ${elapsed}ms, size: ${blob.size} bytes`);
             resolve(blob);
           } else {
+            console.error(`[Mobile Frame ${frame}] Failed to create blob from canvas`);
             reject(new Error('Failed to create blob from canvas'));
           }
         }, 'image/jpeg', jpegQuality);
       });
       
+      console.log(`[Mobile Frame ${frame}] Converting blob to FFmpeg data`);
       const imageData = await fetchFile(blob);
       const filename = `frame_${String(frame).padStart(5, '0')}.jpg`;
-      await this.ffmpeg.writeFile(filename, imageData);
       
+      console.log(`[Mobile Frame ${frame}] Writing to FFmpeg: ${filename} (${imageData.byteLength} bytes)`);
+      const writeStartTime = Date.now();
+      await this.ffmpeg.writeFile(filename, imageData);
+      console.log(`[Mobile Frame ${frame}] FFmpeg write completed in ${Date.now() - writeStartTime}ms`);
+      
+    } catch (error) {
+      console.error(`[Mobile Frame ${frame}] Error in processFrameMobile:`, error);
+      throw error;
     } finally {
       // Clean up only the canvas, not the video
+      console.log(`[Mobile Frame ${frame}] Cleaning up canvas`);
       frameCanvas.remove();
     }
   }

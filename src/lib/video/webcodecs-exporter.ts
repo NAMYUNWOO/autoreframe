@@ -16,6 +16,7 @@ export class WebCodecsExporter {
   private isMobile = false;
   private decoderConfig: any = null;
   private encoderError: any = null;
+  private hardwareAcceleration: HardwareAcceleration = 'no-preference';
 
   async export(
     videoElement: HTMLVideoElement,
@@ -38,8 +39,8 @@ export class WebCodecsExporter {
     console.log('[WebCodecs Export] Output format:', options.format || 'mp4');
     
     // Set output format
-    // Force MP4 for mobile compatibility
-    this.outputFormat = 'mp4';
+    // Use requested format or default to MP4
+    this.outputFormat = (options.format as 'mp4' | 'webm') || 'mp4';
     console.log('[WebCodecs Export] Target format:', this.outputFormat);
     
     // Check if mobile device
@@ -166,34 +167,83 @@ export class WebCodecsExporter {
     let codec: string;
     
     // Try to find a working codec
-    const mp4Codecs = ['avc1.42001E', 'avc1.4D401E', 'avc1.64001E'];
+    // More H.264 profiles to try
+    const mp4Codecs = [
+      'avc1.42E01E', // Baseline Profile Level 3.0
+      'avc1.42001E', // Baseline Profile Level 3.0 (alternate)
+      'avc1.420014', // Baseline Profile Level 2.0
+      'avc1.42000d', // Baseline Profile Level 1.3
+      'avc1.4D401E', // Main Profile Level 3.0
+      'avc1.64001E', // High Profile Level 3.0
+      'avc1.640028', // High Profile Level 4.0
+      'avc1.640029'  // High Profile Level 4.1
+    ];
     const webmCodecs = ['vp09.00.10.08', 'vp9', 'vp8'];
     const codecs = this.outputFormat === 'mp4' ? mp4Codecs : webmCodecs;
     
     let selectedCodec: string | null = null;
+    
+    // Try different hardware acceleration options
+    const hardwareOptions = ['no-preference', 'prefer-hardware', 'prefer-software'] as const;
+    
     for (const testCodec of codecs) {
+      for (const hwOption of hardwareOptions) {
+        try {
+          const support = await VideoEncoder.isConfigSupported({
+            codec: testCodec,
+            width,
+            height,
+            bitrate,
+            framerate: fps,
+            hardwareAcceleration: hwOption
+          });
+          
+          console.log(`[WebCodecs Export] Testing codec ${testCodec} with ${hwOption}:`, support);
+          
+          if (support.supported) {
+            selectedCodec = testCodec;
+            // Store the working hardware acceleration option
+            this.hardwareAcceleration = hwOption;
+            console.log(`[WebCodecs Export] Found working codec: ${testCodec} with ${hwOption}`);
+            break;
+          }
+        } catch (e) {
+          console.log(`[WebCodecs Export] Codec ${testCodec}/${hwOption} test failed:`, e);
+        }
+      }
+      if (selectedCodec) break;
+    }
+    
+    if (!selectedCodec && this.outputFormat === 'mp4') {
+      // Try one more time with the most basic H.264 profile
       try {
+        const basicH264 = 'avc1.42000d'; // H.264 Baseline Profile Level 1.3
         const support = await VideoEncoder.isConfigSupported({
-          codec: testCodec,
+          codec: basicH264,
           width,
           height,
           bitrate,
-          framerate: fps
+          framerate: fps,
+          hardwareAcceleration: 'prefer-software'
         });
-        
         if (support.supported) {
-          selectedCodec = testCodec;
-          break;
+          selectedCodec = basicH264;
+          console.log('[WebCodecs Export] Using basic H.264 profile');
         }
       } catch (e) {
-        // Continue to next codec
+        console.log('[WebCodecs Export] Basic H.264 test failed:', e);
       }
     }
     
     if (!selectedCodec) {
-      // Fallback to VP8 if nothing else works
-      selectedCodec = 'vp8';
-      this.outputFormat = 'webm';
+      // Only fallback to WebM if MP4 was explicitly requested but not supported
+      if (this.outputFormat === 'mp4') {
+        console.warn('[WebCodecs Export] H.264 not supported, falling back to WebM');
+        selectedCodec = 'vp8';
+        this.outputFormat = 'webm';
+      } else {
+        selectedCodec = 'vp8';
+      }
     }
     
     codec = selectedCodec;
@@ -213,7 +263,8 @@ export class WebCodecsExporter {
     if (codec.startsWith('avc')) {
       config.avc = { format: 'avc' };
     }
-    config.hardwareAcceleration = 'prefer-software'; // More stable on mobile
+    // Use the hardware acceleration option that was found to work
+    config.hardwareAcceleration = this.hardwareAcceleration;
 
     // Check if configuration is supported
     const isSupported = await VideoEncoder.isConfigSupported(config);

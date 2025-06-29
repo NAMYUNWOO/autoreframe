@@ -15,6 +15,7 @@ export class WebCodecsExporter {
   private outputFormat: 'mp4' | 'webm' = 'mp4';
   private isMobile = false;
   private decoderConfig: any = null;
+  private encoderError: any = null;
 
   async export(
     videoElement: HTMLVideoElement,
@@ -30,6 +31,7 @@ export class WebCodecsExporter {
     this.processedFrames = 0;
     this.totalFrames = Math.floor(metadata.duration * metadata.fps);
     this.encodedChunks = [];
+    this.encoderError = null;
 
     console.log('[WebCodecs Export] Starting export...');
     console.log('[WebCodecs Export] Total frames:', this.totalFrames);
@@ -153,7 +155,10 @@ export class WebCodecsExporter {
       },
       error: (error) => {
         console.error('[WebCodecs Export] Encoder error:', error);
-        throw new Error(`Encoder error: ${error.message}`);
+        console.error('[WebCodecs Export] Encoder state at error:', this.encoder?.state);
+        // Don't throw here as it will close the encoder
+        // Store the error to handle it later
+        this.encoderError = error;
       }
     });
 
@@ -218,8 +223,63 @@ export class WebCodecsExporter {
     }
 
     this.encoderConfig = config;
-    await this.encoder.configure(config);
-    console.log('[WebCodecs Export] Encoder configured:', config);
+    
+    console.log('[WebCodecs Export] Encoder state before configure:', this.encoder.state);
+    
+    // Try to configure encoder with retry logic
+    let configureAttempts = 0;
+    const maxAttempts = 3;
+    
+    while (configureAttempts < maxAttempts) {
+      try {
+        await this.encoder.configure(config);
+        console.log('[WebCodecs Export] Encoder configured successfully');
+        console.log('[WebCodecs Export] Encoder state after configure:', this.encoder.state);
+        console.log('[WebCodecs Export] Configuration used:', config);
+        break;
+      } catch (configError) {
+        configureAttempts++;
+        console.error(`[WebCodecs Export] Configure attempt ${configureAttempts} failed:`, configError);
+        
+        if (configureAttempts >= maxAttempts) {
+          console.error('[WebCodecs Export] Failed to configure encoder after all attempts');
+          throw new Error(`Failed to configure encoder: ${configError}`);
+        }
+        
+        // Reset encoder and try again
+        console.log('[WebCodecs Export] Resetting encoder for retry...');
+        if (this.encoder.state === 'closed') {
+          this.encoder = new VideoEncoder({
+            output: (chunk, metadata) => {
+              if (!this.decoderConfig && metadata?.decoderConfig) {
+                this.decoderConfig = metadata.decoderConfig;
+                console.log('[WebCodecs Export] Decoder config received:', this.decoderConfig);
+              }
+              
+              if (this.encodedChunks.length === 0) {
+                console.log('[WebCodecs Export] First chunk metadata:', metadata);
+                console.log('[WebCodecs Export] Chunk properties:', {
+                  type: chunk.type,
+                  timestamp: chunk.timestamp,
+                  duration: chunk.duration,
+                  byteLength: chunk.byteLength
+                });
+              }
+              
+              this.encodedChunks.push({ chunk, metadata });
+            },
+            error: (error) => {
+              console.error('[WebCodecs Export] Encoder error:', error);
+              console.error('[WebCodecs Export] Encoder state at error:', this.encoder?.state);
+              this.encoderError = error;
+            }
+          });
+        }
+        
+        // Wait a bit before retry
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    }
   }
 
   private async processFrames(
@@ -372,12 +432,31 @@ export class WebCodecsExporter {
           });
         }
 
+        // Check for encoder errors first
+        if (this.encoderError) {
+          throw new Error(`Encoder error occurred: ${this.encoderError.message || this.encoderError}`);
+        }
+        
         // Encode frame with error handling
         if (this.encoder && this.encoder.state === 'configured') {
-          this.encoder.encode(frame);
+          try {
+            this.encoder.encode(frame);
+          } catch (encodeError) {
+            console.error('[WebCodecs Export] Error encoding frame:', encodeError);
+            console.error('[WebCodecs Export] Encoder state:', this.encoder.state);
+            console.error('[WebCodecs Export] Frame details:', {
+              timestamp: frame.timestamp,
+              duration: frame.duration,
+              format: frame.format,
+              codedWidth: frame.codedWidth,
+              codedHeight: frame.codedHeight
+            });
+            throw encodeError;
+          }
         } else {
           console.error('[WebCodecs Export] Encoder not in configured state:', this.encoder?.state);
-          throw new Error('Encoder is not configured');
+          console.error('[WebCodecs Export] Encoder object:', this.encoder);
+          throw new Error(`Encoder is not configured. State: ${this.encoder?.state || 'null'}`);
         }
       } catch (e) {
         console.error(`[WebCodecs Export] Error at frame ${frameNumber}:`, e);
@@ -621,6 +700,7 @@ export class WebCodecsExporter {
   private cleanup() {
     console.log('[WebCodecs Export] Cleaning up encoder/decoder');
     if (this.encoder) {
+      console.log('[WebCodecs Export] Encoder state before cleanup:', this.encoder.state);
       if (this.encoder.state === 'configured') {
         try {
           this.encoder.close();
@@ -643,5 +723,7 @@ export class WebCodecsExporter {
     }
     
     this.encodedChunks = [];
+    this.encoderError = null;
+    this.decoderConfig = null;
   }
 }

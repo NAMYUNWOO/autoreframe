@@ -53,14 +53,14 @@ export class PersonYOLODetector {
   async initialize(): Promise<void> {
     // Skip if already initialized
     if (this.model) {
-      console.log('Model already initialized, skipping...');
+      // Model already initialized, skipping...
       return;
     }
     
     try {
       // Set up TensorFlow.js backend for mobile compatibility
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      console.log('Initializing on mobile:', isMobile);
+      // Initializing on mobile: isMobile
       
       if (isMobile) {
         // Use same WebGL configuration as PC for consistency
@@ -77,13 +77,13 @@ export class PersonYOLODetector {
       }
       
       await tf.ready();
-      console.log('TensorFlow.js backend:', tf.getBackend());
-      console.log('TensorFlow.js version:', tf.version.tfjs);
+      // TensorFlow.js backend initialized
+      // TensorFlow.js version checked
       
       // Try to fetch the model.json first to verify it's accessible
       try {
         const response = await fetch(this.modelPath);
-        console.log('Model fetch response status:', response.status);
+        // Model fetch response received
         if (!response.ok) {
           throw new Error(`Failed to fetch model: ${response.status} ${response.statusText}`);
         }
@@ -93,7 +93,7 @@ export class PersonYOLODetector {
       }
       
       this.model = await tf.loadGraphModel(this.modelPath);
-      console.log('YOLOv12n person detection model initialized successfully');
+      // YOLOv12n person detection model initialized successfully
       
       // Test the model with a dummy input to ensure it's working
       const testInput = tf.zeros([1, this.inputSize, this.inputSize, 3]);
@@ -114,10 +114,10 @@ export class PersonYOLODetector {
       
       // Handle both single tensor and array outputs
       if (Array.isArray(testOutput)) {
-        console.log('Model test output shape:', testOutput[0].shape);
+        // Model test output shape verified
         testOutput.forEach(t => t.dispose());
       } else {
-        console.log('Model test output shape:', testOutput.shape);
+        // Model test output shape verified
         testOutput.dispose();
       }
       testInput.dispose();

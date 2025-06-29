@@ -147,18 +147,29 @@ export default function Home() {
     try {
       let blob = await exportVideo(videoElement, metadata, options);
       
+      // Get actual format (might be different from requested format due to codec support)
+      const actualFormat = (blob as any).actualFormat || options.format;
+      
+      // Alert user if format changed
+      if (actualFormat !== options.format && options.format) {
+        alert(`Note: Your device doesn't support ${options.format.toUpperCase()} encoding. The video was exported as ${actualFormat.toUpperCase()} instead.`);
+      }
+      
       // Download the file
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const extension = options.format;
+      const extension = actualFormat;
       // Remove extension from filename if it exists
       const baseFilename = videoFile?.name ? videoFile.name.replace(/\.[^/.]+$/, '') : 'video';
       a.download = `reframed_${baseFilename}.${extension}`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      // console.error('Export failed:', error);
+      console.error('Export failed:', error);
+      if (error instanceof Error) {
+        console.error('Error stack:', error.stack);
+      }
       alert(`Failed to export video: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }, [getVideoElement, metadata, exportVideo, videoFile]);
@@ -531,7 +542,7 @@ export default function Home() {
                 />
                 {isExporting && (
                   <div className="mt-4 text-sm text-gray-400">
-                    <p>Processing video with FFmpeg...</p>
+                    <p>Processing video with WebCodecs...</p>
                     <p>This may take a few moments depending on video length.</p>
                   </div>
                 )}

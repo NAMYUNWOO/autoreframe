@@ -164,7 +164,7 @@ export function HeadSelector({
       const scale = Math.min(1920 / canvasWidth, 1920 / canvasHeight);
       canvasWidth = Math.floor(canvasWidth * scale);
       canvasHeight = Math.floor(canvasHeight * scale);
-      console.log(`Mobile: Scaling canvas from ${videoElement.videoWidth}x${videoElement.videoHeight} to ${canvasWidth}x${canvasHeight}`);
+      // Mobile: Scaling canvas for detection
     }
     
     canvas.width = canvasWidth;
@@ -174,18 +174,18 @@ export function HeadSelector({
 
     // Draw first frame
     ctx.drawImage(videoElement, 0, 0, canvasWidth, canvasHeight);
-    console.log('Canvas size:', canvas.width, 'x', canvas.height, 'Mobile:', isMobile);
+    // Canvas size configured
     
     // Debug: Check if canvas has actual content
     if (isMobile) {
       const imageData = ctx.getImageData(0, 0, Math.min(10, canvas.width), Math.min(10, canvas.height));
       const hasContent = imageData.data.some((pixel, i) => i % 4 !== 3 && pixel !== 0);
-      console.log('Canvas has content:', hasContent);
+      // Canvas content check
       
       // Try to save canvas as image for debugging
       try {
         const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
-        console.log('Canvas data URL length:', dataUrl.length);
+        // Canvas data URL generated
       } catch (e) {
         console.error('Cannot convert canvas to data URL:', e);
       }
@@ -196,7 +196,7 @@ export function HeadSelector({
       // Show mobile-specific message
       if (isMobile) {
         setIsDetecting(true);
-        console.log('Mobile device detected - using optimized detection');
+        // Mobile device detected - using optimized detection
       }
       
       // console.log('Importing PersonYOLODetector...');
@@ -216,7 +216,7 @@ export function HeadSelector({
       // Always use canvas for detection to ensure consistency
       const personDetections = await detector.detect(canvas);
       
-      console.log('Raw detections found:', personDetections.length, 'on', isMobile ? 'mobile' : 'desktop');
+      // Raw detections found
       
       // Always use ByteTracker for consistency
       // console.log('Applying ByteTracker...');

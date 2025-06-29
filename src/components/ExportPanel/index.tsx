@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { ExportOptions } from '@/types';
-import { consoleLogger } from '@/lib/utils/console-logger';
 
 interface ExportPanelProps {
   onExport: (options: ExportOptions) => Promise<void>;
@@ -127,13 +126,13 @@ export function ExportPanel({
             Export Video
           </button>
 
-          {/* FFmpeg Notice */}
+          {/* WebCodecs Notice */}
           <div className="mt-3 text-xs text-gray-400">
             <p className="flex items-center">
               <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
-              High-quality MP4 export using H.264 codec (compatible with all devices)
+              High-quality MP4 export using WebCodecs API (compatible with all devices)
             </p>
           </div>
         </>
@@ -160,21 +159,6 @@ export function ExportPanel({
                        hover:bg-red-600 transition-colors"
           >
             Cancel Export
-          </button>
-
-          {/* Download Console Logs Button during export */}
-          <button
-            onClick={() => {
-              const timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, -5);
-              consoleLogger.downloadLogs(`console-logs-export-${timestamp}.txt`);
-            }}
-            className="w-full mt-2 py-2 px-4 bg-gray-600 text-white text-sm rounded-md
-                       hover:bg-gray-700 transition-colors flex items-center justify-center"
-          >
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-            </svg>
-            Download Console Logs
           </button>
         </>
       )}

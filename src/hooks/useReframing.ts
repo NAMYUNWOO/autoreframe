@@ -1,8 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { ReframingEngine } from '@/lib/reframing/engine';
-import { SimpleExporter } from '@/lib/video/simple-exporter';
-import { FFmpegExporter } from '@/lib/video/ffmpeg-exporter';
-import { FFmpegSequenceExporter } from '@/lib/video/ffmpeg-sequence-exporter';
+import { WebCodecsExporter } from '@/lib/video/webcodecs-exporter';
 import { 
   ReframingConfig, 
   FrameTransform, 
@@ -30,9 +28,7 @@ export function useReframing() {
   const [storedInitialTargetBox, setStoredInitialTargetBox] = useState<{ width: number; height: number } | undefined>();
   
   const engineRef = useRef<ReframingEngine | null>(null);
-  const simpleExporterRef = useRef<SimpleExporter | null>(null);
-  const ffmpegExporterRef = useRef<FFmpegExporter | null>(null);
-  const ffmpegSequenceExporterRef = useRef<FFmpegSequenceExporter | null>(null);
+  const webCodecsExporterRef = useRef<WebCodecsExporter | null>(null);
 
   // Initialize reframing engine
   useEffect(() => {
@@ -106,39 +102,21 @@ export function useReframing() {
     try {
       let blob: Blob;
       
-      // Use FFmpegSequenceExporter for MOV/MP4 for better frame accuracy
-      if (options.format === 'mov' || options.format === 'mp4') {
-        if (!ffmpegSequenceExporterRef.current) {
-          ffmpegSequenceExporterRef.current = new FFmpegSequenceExporter();
-        }
-        
-        blob = await ffmpegSequenceExporterRef.current.export(
-          videoElement,
-          transforms,
-          metadata,
-          config.outputRatio,
-          options,
-          (progress) => setExportProgress(progress),
-          config,
-          storedInitialTargetBox
-        );
-      } else {
-        // Use SimpleExporter for WebM
-        if (!simpleExporterRef.current) {
-          simpleExporterRef.current = new SimpleExporter();
-        }
-        
-        blob = await simpleExporterRef.current.export(
-          videoElement,
-          transforms,
-          metadata,
-          config.outputRatio,
-          options,
-          (progress) => setExportProgress(progress),
-          config,
-          storedInitialTargetBox
-        );
+      // Use WebCodecs for all formats - replaces FFmpeg completely
+      if (!webCodecsExporterRef.current) {
+        webCodecsExporterRef.current = new WebCodecsExporter();
       }
+      
+      blob = await webCodecsExporterRef.current.export(
+        videoElement,
+        transforms,
+        metadata,
+        config.outputRatio,
+        options,
+        (progress) => setExportProgress(progress),
+        config,
+        storedInitialTargetBox
+      );
 
       return blob;
     } finally {

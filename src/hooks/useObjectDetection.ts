@@ -60,7 +60,7 @@ export function useObjectDetection() {
   useEffect(() => {
     const initDetector = async () => {
       try {
-        console.log('Initializing PersonYOLODetector...');
+        // Initializing PersonYOLODetector...
         detectorRef.current = new PersonYOLODetector();
         await detectorRef.current.initialize();
         
@@ -69,7 +69,7 @@ export function useObjectDetection() {
         
         // Initialize second detector for parallel processing
         if (enableParallel) {
-          console.log('Initializing second detector for parallel processing...');
+          // Initializing second detector for parallel processing...
           secondDetectorRef.current = new PersonYOLODetector();
           await secondDetectorRef.current.initialize();
           secondDetectorRef.current.setConfidenceThreshold(0.3);
@@ -79,11 +79,11 @@ export function useObjectDetection() {
         if (useHeadDetection) {
           headDetectorRef.current = new HeadDetector();
           await headDetectorRef.current.initialize();
-          console.log('Head detector initialized');
+          // Head detector initialized
         }
         
         setIsModelLoaded(true);
-        console.log('Model loaded successfully!');
+        // Model loaded successfully!
       } catch (error) {
         console.error('Failed to initialize detectors:', error);
         if (error instanceof Error) {
@@ -174,7 +174,7 @@ export function useObjectDetection() {
       if (isMobileDevice) {
         // Mobile: Progressive processing with memory management
         const CHUNK_SIZE = 50; // Process and clear memory every 50 frames
-        console.log(`[Mobile] Progressive processing: ${totalFrames} frames with memory cleanup every ${CHUNK_SIZE} frames`);
+        // Mobile: Progressive processing with memory cleanup
         
         let currentChunk = 0;
         let processedInChunk = 0;
@@ -248,7 +248,7 @@ export function useObjectDetection() {
           
           // Memory management: Clean up every CHUNK_SIZE frames
           if (processedInChunk >= CHUNK_SIZE) {
-            console.log(`[Mobile] Processed ${processedFrames}/${totalFrames} frames, cleaning memory...`);
+            // Mobile: Cleaning memory after chunk
             
             // Update UI with current detections
             if (byteTrackerRef.current) {
@@ -292,7 +292,7 @@ export function useObjectDetection() {
         
         // Second pass: process detections with parallel YOLO inference but sequential ByteTracker
         const useParallel = enableParallel && secondDetectorRef.current && detectionTasks.length > 10 && !isMobile();
-        console.log(`Processing ${detectionTasks.length} detection tasks (parallel: ${useParallel})`);
+        // Processing detection tasks
       
       if (useParallel) {
         // First, run YOLO detection in parallel
@@ -386,7 +386,7 @@ export function useObjectDetection() {
             
             // Debug log
             const trackCount = new Set(currentDetections.flatMap(d => d.boxes.map(b => b.trackId)).filter(id => id !== undefined)).size;
-            console.log(`Frame ${task.frameNumber}: ${currentDetections.length} detections, ${trackCount} tracks`);
+            // Frame processing update
           }
         }
       } else {
@@ -464,7 +464,7 @@ export function useObjectDetection() {
             
             // Every 5 detections, force garbage collection if available
             if (processedCount % 5 === 0) {
-              console.log(`Mobile: Processed ${processedCount} detections, cleaning memory...`);
+              // Mobile: Cleaning memory after batch
               
               // Clear any remaining old frame data
               const currentFrame = task.frameNumber;
@@ -488,12 +488,12 @@ export function useObjectDetection() {
       } // Close desktop processing block
 
       // Final interpolation for all frames
-      console.log(`Getting all detections for ${totalFrames} frames...`);
+      // Getting all detections with interpolation
       let allDetections: Detection[];
       
       // Get all detections with interpolation from ByteTrackInterpolator
       allDetections = byteTrackerRef.current!.getAllDetections(totalFrames, metadata.fps);
-      console.log(`Total detections after interpolation: ${allDetections.length}`);
+      // Total detections calculated
       // Head centers are already set by detectFrame for key frames
       // For interpolated frames, we need to interpolate head positions
       

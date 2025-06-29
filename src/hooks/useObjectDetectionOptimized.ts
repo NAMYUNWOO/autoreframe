@@ -48,21 +48,21 @@ export function useObjectDetectionOptimized(enableParallel: boolean = true) {
   useEffect(() => {
     const initDetector = async () => {
       try {
-        console.log('Initializing PersonYOLODetector...');
+        // Initializing PersonYOLODetector...
         detectorRef.current = new PersonYOLODetector();
         await detectorRef.current.initialize();
         detectorRef.current.setConfidenceThreshold(0.3);
         
         // Initialize second detector for parallel processing
         if (parallelEnabled) {
-          console.log('Initializing second detector for parallel processing...');
+          // Initializing second detector for parallel processing...
           workerDetectorRef.current = new PersonYOLODetector();
           await workerDetectorRef.current.initialize();
           workerDetectorRef.current.setConfidenceThreshold(0.3);
         }
         
         setIsModelLoaded(true);
-        console.log('Model(s) loaded successfully!');
+        // Model(s) loaded successfully!
       } catch (error) {
         console.error('Failed to initialize detectors:', error);
         setIsModelLoaded(false);

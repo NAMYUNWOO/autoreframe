@@ -46,7 +46,7 @@ export function useParallelObjectDetection(maxConcurrency: number = 3) {
   useEffect(() => {
     const initDetectors = async () => {
       try {
-        console.log(`Initializing ${maxConcurrency} PersonYOLODetectors for parallel processing...`);
+        // Initializing multiple PersonYOLODetectors for parallel processing...
         
         // Create detector pool
         const detectorPromises = [];
@@ -64,7 +64,7 @@ export function useParallelObjectDetection(maxConcurrency: number = 3) {
         detectorPoolRef.current = [...detectors];
         
         setIsModelLoaded(true);
-        console.log(`${maxConcurrency} models loaded successfully for parallel processing!`);
+        // Models loaded successfully for parallel processing!
       } catch (error) {
         console.error('Failed to initialize detectors:', error);
         setIsModelLoaded(false);

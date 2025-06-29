@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Detection, BoundingBox, ReframingConfig } from '@/types';
+import { Detection, BoundingBox, ReframingConfig, VideoMetadata } from '@/types';
 import { REFRAMING_PRESETS } from '@/lib/reframing/presets';
 import { isDevelopment } from '@/lib/utils/env';
 import { getAdaptiveConfig } from '@/config/detection-adaptive';
@@ -13,6 +13,7 @@ interface HeadSelectorProps {
   confidenceThreshold?: number;
   onConfidenceChange?: (value: number) => void;
   onGetDetectionInfo?: () => void;
+  metadata?: VideoMetadata | null;
 }
 
 export function HeadSelector({ 
@@ -21,7 +22,8 @@ export function HeadSelector({
   onConfirm, 
   confidenceThreshold = 0.3,
   onConfidenceChange,
-  onGetDetectionInfo
+  onGetDetectionInfo,
+  metadata
 }: HeadSelectorProps) {
   const [detections, setDetections] = useState<BoundingBox[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -156,21 +158,39 @@ export function HeadSelector({
 
     // Set canvas size - optimize for mobile
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    let canvasWidth = videoElement.videoWidth;
-    let canvasHeight = videoElement.videoHeight;
+    
+    // Use metadata dimensions if available (which include rotation), otherwise use video dimensions
+    let canvasWidth = metadata?.width || videoElement.videoWidth;
+    let canvasHeight = metadata?.height || videoElement.videoHeight;
+    
+    console.log('[HeadSelector] Video dimensions:', {
+      videoWidth: videoElement.videoWidth,
+      videoHeight: videoElement.videoHeight,
+      metadataWidth: metadata?.width,
+      metadataHeight: metadata?.height,
+      rotation: metadata?.rotation,
+      isMobile
+    });
     
     // For mobile, limit canvas size to reduce memory usage
     if (isMobile && (canvasWidth > 1920 || canvasHeight > 1920)) {
       const scale = Math.min(1920 / canvasWidth, 1920 / canvasHeight);
       canvasWidth = Math.floor(canvasWidth * scale);
       canvasHeight = Math.floor(canvasHeight * scale);
-      // Mobile: Scaling canvas for detection
+      console.log('[HeadSelector] Mobile: Scaling canvas for detection, scale:', scale);
     }
     
     canvas.width = canvasWidth;
     canvas.height = canvasHeight;
-    overlayCanvas.width = videoElement.videoWidth;
-    overlayCanvas.height = videoElement.videoHeight;
+    
+    // Use metadata dimensions for overlay canvas too
+    overlayCanvas.width = metadata?.width || videoElement.videoWidth;
+    overlayCanvas.height = metadata?.height || videoElement.videoHeight;
+    
+    console.log('[HeadSelector] Canvas sizes:', {
+      detectionCanvas: { width: canvas.width, height: canvas.height },
+      overlayCanvas: { width: overlayCanvas.width, height: overlayCanvas.height }
+    });
 
     // Draw first frame
     ctx.drawImage(videoElement, 0, 0, canvasWidth, canvasHeight);
@@ -233,8 +253,34 @@ export function HeadSelector({
       // console.log('HeadSelector: ByteTracker using threshold', confidenceThreshold);
       
       // Process first frame with ByteTracker
-      const finalDetections = byteTracker.update(personDetections, 0);
+      let finalDetections = byteTracker.update(personDetections, 0);
       // console.log('ByteTracker detections:', finalDetections.length);
+      
+      // If canvas was scaled down for detection, scale up the detection coordinates
+      const targetWidth = metadata?.width || videoElement.videoWidth;
+      const targetHeight = metadata?.height || videoElement.videoHeight;
+      
+      if (canvasWidth !== targetWidth || canvasHeight !== targetHeight) {
+        const scaleX = targetWidth / canvasWidth;
+        const scaleY = targetHeight / canvasHeight;
+        
+        console.log('[HeadSelector] Scaling detection coordinates:', { 
+          scaleX, 
+          scaleY,
+          fromSize: { width: canvasWidth, height: canvasHeight },
+          toSize: { width: targetWidth, height: targetHeight }
+        });
+        
+        finalDetections = finalDetections.map(det => ({
+          ...det,
+          x: det.x * scaleX,
+          y: det.y * scaleY,
+          width: det.width * scaleX,
+          height: det.height * scaleY,
+          headCenterX: det.headCenterX ? det.headCenterX * scaleX : undefined,
+          headCenterY: det.headCenterY ? det.headCenterY * scaleY : undefined
+        }));
+      }
         
         // Try to detect heads for each person
         const useHeadDetection = false; // Disable head detection - model not reliable
@@ -356,7 +402,7 @@ export function HeadSelector({
     } finally {
       setIsDetecting(false);
     }
-  }, [videoElement, confidenceThreshold, drawDetections]);
+  }, [videoElement, confidenceThreshold, drawDetections, metadata]);
 
   // Calculate reframe box preview
   const calculateReframeBox = useCallback(() => {
@@ -421,31 +467,86 @@ export function HeadSelector({
     drawDetections(ctx, detections, reframeBox);
   }, [detections, drawDetections, calculateReframeBox, activeTab, reframeBoxSize, reframeBoxOffset]);
 
+  // Calculate canvas coordinates considering objectFit: 'contain'
+  const getCanvasCoordinates = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!overlayCanvasRef.current) return null;
+    
+    const rect = overlayCanvasRef.current.getBoundingClientRect();
+    const canvasAspectRatio = overlayCanvasRef.current.width / overlayCanvasRef.current.height;
+    const containerAspectRatio = rect.width / rect.height;
+    
+    let renderWidth, renderHeight, offsetX, offsetY;
+    
+    if (canvasAspectRatio > containerAspectRatio) {
+      renderWidth = rect.width;
+      renderHeight = rect.width / canvasAspectRatio;
+      offsetX = 0;
+      offsetY = (rect.height - renderHeight) / 2;
+    } else {
+      renderHeight = rect.height;
+      renderWidth = rect.height * canvasAspectRatio;
+      offsetX = (rect.width - renderWidth) / 2;
+      offsetY = 0;
+    }
+    
+    const relativeX = event.clientX - rect.left - offsetX;
+    const relativeY = event.clientY - rect.top - offsetY;
+    
+    if (relativeX < 0 || relativeX > renderWidth || relativeY < 0 || relativeY > renderHeight) {
+      return null;
+    }
+    
+    return {
+      x: (relativeX / renderWidth) * overlayCanvasRef.current.width,
+      y: (relativeY / renderHeight) * overlayCanvasRef.current.height
+    };
+  };
+
   // Handle canvas mouse down
   const handleCanvasMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!overlayCanvasRef.current) return;
-
-    const rect = overlayCanvasRef.current.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width * overlayCanvasRef.current.width;
-    const y = (event.clientY - rect.top) / rect.height * overlayCanvasRef.current.height;
+    console.log('[HeadSelector] Mouse down event triggered');
+    
+    const coords = getCanvasCoordinates(event);
+    if (!coords) {
+      console.log('[HeadSelector] Click outside canvas area or no canvas ref');
+      return;
+    }
+    
+    const { x, y } = coords;
+    
+    // Debug logging for click coordinates
+    console.log('[HeadSelector] Canvas click at:', { x, y });
 
     if (activeTab === 'target') {
       // In target tab, select a person
+      console.log('[HeadSelector] Checking detections:', detections.length);
+      
       for (let i = 0; i < detections.length; i++) {
         const det = detections[i];
+        console.log(`[HeadSelector] Detection ${i}:`, {
+          x: det.x,
+          y: det.y,
+          width: det.width,
+          height: det.height,
+          clickInBounds: x >= det.x && x <= det.x + det.width && y >= det.y && y <= det.y + det.height
+        });
+        
         if (
           x >= det.x &&
           x <= det.x + det.width &&
           y >= det.y &&
           y <= det.y + det.height
         ) {
+          console.log(`[HeadSelector] Selected detection ${i}`);
           setSelectedIndex(i);
           onSelectHead(det);
           
           // Redraw with selection
-          const ctx = overlayCanvasRef.current.getContext('2d');
-          if (ctx) {
-            drawDetections(ctx, detections, null);
+          if (overlayCanvasRef.current) {
+            const ctx = overlayCanvasRef.current.getContext('2d');
+            if (ctx) {
+              drawDetections(ctx, detections, null);
+            }
           }
           break;
         }
@@ -466,11 +567,12 @@ export function HeadSelector({
 
   // Handle mouse move for dragging
   const handleCanvasMouseMove = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDraggingReframeBox || !overlayCanvasRef.current || selectedIndex === null) return;
+    if (!isDraggingReframeBox || selectedIndex === null) return;
 
-    const rect = overlayCanvasRef.current.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width * overlayCanvasRef.current.width;
-    const y = (event.clientY - rect.top) / rect.height * overlayCanvasRef.current.height;
+    const coords = getCanvasCoordinates(event);
+    if (!coords) return;
+    
+    const { x, y } = coords;
 
     // Calculate the movement delta
     const deltaX = x - dragStartPos.x;
@@ -605,7 +707,8 @@ export function HeadSelector({
         <div 
           className="relative bg-black rounded-lg overflow-hidden w-full max-h-[60vh] md:max-h-[calc(100vh-600px)]"
           style={{ 
-            aspectRatio: videoElement ? `${videoElement.videoWidth}/${videoElement.videoHeight}` : '16/9',
+            aspectRatio: metadata ? `${metadata.width}/${metadata.height}` : 
+                        videoElement ? `${videoElement.videoWidth}/${videoElement.videoHeight}` : '16/9',
             maxWidth: '100%'
           }}
         >

@@ -392,6 +392,7 @@ export default function Home() {
                   confidenceThreshold={confidenceThreshold}
                   onConfidenceChange={handleConfidenceChange}
                   onGetDetectionInfo={handleGetDetectionInfo}
+                  metadata={metadata}
                 />
               )}
 

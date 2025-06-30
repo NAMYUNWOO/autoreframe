@@ -117,7 +117,30 @@ export class WebCodecsExporter {
       return blob;
     } catch (e) {
       console.error('[WebCodecs Export] Export failed at step:', e);
-      throw e;
+      
+      // Create detailed error message
+      let detailedError = 'Export failed: ';
+      if (e instanceof Error) {
+        detailedError += e.message;
+      } else {
+        detailedError += 'Unknown error';
+      }
+      
+      // Add context information
+      detailedError += `\n\nContext:`;
+      detailedError += `\n- Device: ${this.isMobile ? 'Mobile' : 'Desktop'}`;
+      detailedError += `\n- Format: ${this.outputFormat}`;
+      detailedError += `\n- Codec: ${this.encoderConfig?.codec || 'not configured'}`;
+      detailedError += `\n- Resolution: ${outputWidth}x${outputHeight}`;
+      detailedError += `\n- Total frames: ${this.totalFrames}`;
+      detailedError += `\n- Processed: ${this.processedFrames}`;
+      detailedError += `\n- Hardware: ${this.hardwareAcceleration}`;
+      
+      if (this.encoderError) {
+        detailedError += `\n\nEncoder error: ${this.encoderError.message || this.encoderError}`;
+      }
+      
+      throw new Error(detailedError);
     } finally {
       this.cleanup();
     }
@@ -157,6 +180,11 @@ export class WebCodecsExporter {
       error: (error) => {
         console.error('[WebCodecs Export] Encoder error:', error);
         console.error('[WebCodecs Export] Encoder state at error:', this.encoder?.state);
+        console.error('[WebCodecs Export] Error details:', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
         // Don't throw here as it will close the encoder
         // Store the error to handle it later
         this.encoderError = error;
@@ -466,26 +494,63 @@ export class WebCodecsExporter {
             duration: Math.floor(1000000 / metadata.fps)
           });
           bitmap.close();
-        } catch (e) {
-          console.error('[WebCodecs Export] ImageBitmap approach failed:', e);
-          // Last resort: create from buffer
-          const imageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
-          const buffer = new ArrayBuffer(imageData.data.byteLength);
-          const view = new Uint8Array(buffer);
-          view.set(imageData.data);
+        } catch (bitmapError) {
+          console.error('[WebCodecs Export] ImageBitmap approach failed:', bitmapError);
           
-          frame = new VideoFrame(view, {
-            format: 'RGBA',
-            timestamp,
-            codedWidth: outputWidth,
-            codedHeight: outputHeight,
-            visibleRect: { x: 0, y: 0, width: outputWidth, height: outputHeight }
-          });
+          try {
+            // Try with regular canvas if OffscreenCanvas failed
+            if (canvas instanceof OffscreenCanvas) {
+              // Create temporary canvas
+              const tempCanvas = document.createElement('canvas');
+              tempCanvas.width = outputWidth;
+              tempCanvas.height = outputHeight;
+              const tempCtx = tempCanvas.getContext('2d');
+              if (tempCtx) {
+                tempCtx.drawImage(canvas as any, 0, 0);
+                const tempBitmap = await createImageBitmap(tempCanvas);
+                frame = new VideoFrame(tempBitmap, {
+                  timestamp,
+                  duration: Math.floor(1000000 / metadata.fps)
+                });
+                tempBitmap.close();
+              } else {
+                throw new Error('Failed to create temp canvas context');
+              }
+            } else {
+              throw bitmapError;
+            }
+          } catch (fallbackError) {
+            console.error('[WebCodecs Export] Canvas fallback failed:', fallbackError);
+            // Last resort: create from buffer
+            const imageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
+            const buffer = new ArrayBuffer(imageData.data.byteLength);
+            const view = new Uint8Array(buffer);
+            view.set(imageData.data);
+            
+            frame = new VideoFrame(view, {
+              format: 'RGBA',
+              timestamp,
+              codedWidth: outputWidth,
+              codedHeight: outputHeight,
+              visibleRect: { x: 0, y: 0, width: outputWidth, height: outputHeight },
+              duration: Math.floor(1000000 / metadata.fps)
+            });
+          }
         }
 
         // Check for encoder errors first
         if (this.encoderError) {
-          throw new Error(`Encoder error occurred: ${this.encoderError.message || this.encoderError}`);
+          const errorInfo = {
+            message: this.encoderError.message || 'Unknown encoder error',
+            frame: frameNumber,
+            timestamp: frame.timestamp,
+            format: frame.format,
+            dimensions: `${frame.codedWidth}x${frame.codedHeight}`,
+            codec: this.encoderConfig?.codec,
+            state: this.encoder?.state
+          };
+          console.error('[WebCodecs Export] Encoder error details:', errorInfo);
+          throw new Error(`Encoder error at frame ${frameNumber}: ${this.encoderError.message || 'Unknown error'}. Format: ${frame.format}, Size: ${frame.codedWidth}x${frame.codedHeight}`);
         }
         
         // Encode frame with error handling
@@ -502,7 +567,15 @@ export class WebCodecsExporter {
               codedWidth: frame.codedWidth,
               codedHeight: frame.codedHeight
             });
-            throw encodeError;
+            
+            // Create detailed error for encoding failure
+            const encodeErrorDetails = `Encoding failed at frame ${frameNumber}/${this.totalFrames}. ` +
+              `Format: ${frame.format}, Size: ${frame.codedWidth}x${frame.codedHeight}, ` +
+              `Timestamp: ${frame.timestamp}, Duration: ${frame.duration}. ` +
+              `Encoder state: ${this.encoder.state}. ` +
+              `Error: ${encodeError instanceof Error ? encodeError.message : 'Unknown encoding error'}`;
+            
+            throw new Error(encodeErrorDetails);
           }
         } else {
           console.error('[WebCodecs Export] Encoder not in configured state:', this.encoder?.state);

@@ -170,7 +170,21 @@ export default function Home() {
       if (error instanceof Error) {
         console.error('Error stack:', error.stack);
       }
-      alert(`Failed to export video: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Show detailed error in alert
+      let errorMessage = 'Failed to export video:\n\n';
+      if (error instanceof Error) {
+        errorMessage += error.message;
+      } else {
+        errorMessage += 'Unknown error';
+      }
+      
+      // Add browser info for debugging
+      errorMessage += '\n\nBrowser Info:';
+      errorMessage += `\n- User Agent: ${navigator.userAgent}`;
+      errorMessage += `\n- Platform: ${navigator.platform}`;
+      
+      alert(errorMessage);
     }
   }, [getVideoElement, metadata, exportVideo, videoFile]);
 

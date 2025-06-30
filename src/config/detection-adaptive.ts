@@ -45,6 +45,12 @@ export function getAdaptiveConfig(videoFps: number) {
       // Override only the FPS-dependent parameters
       trackBuffer: Math.max(10, trackBuffer), // Minimum 10 frames
       maxTimeLost: Math.max(10, maxTimeLost), // Minimum 10 frames
+    },
+    botSort: {
+      ...detectionConfig.botSort,
+      // Override only the FPS-dependent parameters
+      trackBuffer: Math.max(10, trackBuffer), // Minimum 10 frames
+      maxTimeLost: Math.max(10, maxTimeLost), // Minimum 10 frames
     }
   };
 }

@@ -17,6 +17,7 @@ export interface BoundingBox {
   trackId?: string;
   headCenterX?: number;
   headCenterY?: number;
+  features?: number[];  // Optional appearance features for BoT-SORT
 }
 
 export interface Detection {

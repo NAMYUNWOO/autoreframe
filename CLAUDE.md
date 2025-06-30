@@ -23,18 +23,18 @@ npm run lint       # Run ESLint for code linting
 ### Application Flow
 1. **Upload**: User uploads video file (`src/components/VideoUploader/`)
 2. **Head Selection**: Select person's head to track (`src/components/HeadSelector/`)
-3. **Detection**: YOLOv8n processes all frames (`src/lib/detection/`)
-4. **Tracking**: ByteTrack algorithm tracks selected person (`src/lib/detection/byteTracker.ts`)
+3. **Detection**: YOLOv12n processes all frames (`src/lib/detection/`)
+4. **Tracking**: ByteTrack algorithm tracks selected person (`src/lib/detection/bytetrack-interpolator.ts`)
 5. **Reframing**: Compute smooth camera movements (`src/lib/reframing/`)
 6. **Trajectory Editing**: Manual keyframe adjustments (`src/components/TrajectoryEditor/`)
-7. **Export**: FFmpeg processes final video (`src/lib/video/ffmpegExporter.ts`)
+7. **Export**: WebCodecs API processes final video (`src/lib/video/webcodecs-exporter.ts`)
 
 ### Key Components
 - **Hooks**: Core logic in `useVideoProcessor`, `useObjectDetection`, `useReframing`
 - **Detection**: YOLOv12n model (`public/yolov12n_web_model/`) detects 80 COCO classes
 - **Tracking**: ByteTrack provides consistent object IDs across frames
 - **Reframing**: Bezier curve interpolation for smooth camera movements
-- **Export**: FFmpeg.js handles video encoding with multiple format options
+- **Export**: WebCodecs API handles video encoding with multiple format options
 
 ### Technical Decisions
 - All processing client-side (no server costs/latency)
@@ -53,3 +53,60 @@ Project follows .cursorrules conventions:
 - No comments unless explicitly requested
 - Descriptive variable names with auxiliary verbs (isLoading, hasError)
 - Event handlers prefixed with "handle" (handleClick)
+
+## Core Data Flow
+
+### Detection Pipeline
+1. **Frame Extraction**: Video frames extracted via canvas API
+2. **YOLO Detection**: TensorFlow.js runs YOLOv12n model on each frame
+   - Confidence threshold: 0.3 (configurable)
+   - NMS IoU threshold: 0.45
+   - Detects every 5th frame by default
+3. **ByteTracker**: Associates detections across frames
+   - Uses Kalman filter for motion prediction
+   - Two-stage matching: high confidence first, then low confidence
+   - Handles track loss and recovery
+4. **Interpolation**: Fills gaps between detected frames
+
+### Reframing Algorithm
+1. **Target Selection**: Manual selection of person to track
+2. **Frame Calculation**: Determines optimal crop for each frame
+   - Maintains selected aspect ratio
+   - Applies padding around target
+   - Handles target loss gracefully
+3. **Smoothing**: Multiple algorithms available
+   - Exponential smoothing
+   - Bezier curve interpolation
+   - Configurable smoothness parameter
+
+### Export Pipeline
+1. **WebCodecs API**: Primary export method
+   - Supports H.264 encoding
+   - Handles HEVC input by transcoding
+   - Mobile-optimized frame processing
+2. **Canvas Rendering**: Applies transforms to each frame
+3. **MP4 Muxing**: Creates final video file
+
+## Key Configuration Files
+- `src/config/detection.ts`: Detection and tracking parameters
+- `src/config/detection-adaptive.ts`: FPS-based adaptive settings
+- `src/lib/reframing/presets.ts`: Reframing presets (social, cinematic, etc.)
+
+## Mobile Considerations
+- Progressive frame processing to manage memory
+- Batch processing with periodic garbage collection
+- Frame duplicate detection for efficiency
+- Adaptive frame rate based on device capabilities
+
+## Testing
+Tests use Jest/React Testing Library pattern:
+```bash
+# No test runner configured yet
+# Test files located at: src/lib/reframing/__tests__/
+```
+
+## Known Technical Constraints
+- ByteTracker is an online algorithm (no future frame lookahead)
+- Person detection only (no pose/keypoint data from YOLOv12n)
+- Mobile Safari HEVC limitations require transcoding
+- WebGL backend required for acceptable performance

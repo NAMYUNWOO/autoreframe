@@ -3,6 +3,7 @@
 # dependencies
 /node_modules
 /reference_project
+/reference_project2
 /not_using
 /.pnp
 .pnp.*

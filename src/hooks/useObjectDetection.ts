@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { PersonYOLODetector } from '@/lib/detection/person-yolo';
 import { ByteTrackInterpolator } from '@/lib/detection/bytetrack-interpolator';
+import { BotSortInterpolator } from '@/lib/detection/botsort/botsort-interpolator';
 import { HeadDetector } from '@/lib/detection/head-detector';
 import { Detection, BoundingBox, TrackedObject } from '@/types';
 import { detectionConfig } from '@/config/detection';
@@ -29,6 +30,17 @@ interface FrameDetectionTask {
   timestamp: number;
 }
 
+// Helper to get the current tracker instance
+function getCurrentTracker(
+  byteTrackerRef: React.MutableRefObject<ByteTrackInterpolator | null>,
+  botSortRef: React.MutableRefObject<BotSortInterpolator | null>
+): ByteTrackInterpolator | BotSortInterpolator | null {
+  if (detectionConfig.tracker === 'botsort') {
+    return botSortRef.current;
+  }
+  return byteTrackerRef.current;
+}
+
 export function useObjectDetection() {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
   const [detections, setDetections] = useState<Detection[]>([]);
@@ -43,6 +55,7 @@ export function useObjectDetection() {
   
   const detectorRef = useRef<PersonYOLODetector | null>(null);
   const byteTrackerRef = useRef<ByteTrackInterpolator | null>(null);
+  const botSortRef = useRef<BotSortInterpolator | null>(null);
   const headDetectorRef = useRef<HeadDetector | null>(null);
   
   // Check if mobile device
@@ -123,13 +136,30 @@ export function useObjectDetection() {
     // Detect objects
     const boxes = await detectorRef.current.detect(imageData, frameNumber);
     
-    // Always use ByteTrack for consistency
-    if (!byteTrackerRef.current) {
-      const defaultConfig = getAdaptiveConfig(30);
-      byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
+    // Use configured tracker
+    let detection: Detection;
+    if (detectionConfig.tracker === 'botsort') {
+      if (!botSortRef.current) {
+        const defaultConfig = getAdaptiveConfig(30);
+        botSortRef.current = new BotSortInterpolator(defaultConfig.botSort);
+      }
+      
+      // Convert to ImageData if needed for CMC
+      let frameImageData: ImageData | undefined;
+      if (detectionConfig.botSort.useCMC && imageData instanceof ImageData) {
+        frameImageData = imageData;
+      }
+      
+      detection = await botSortRef.current.processFrame(boxes, frameNumber, timestamp, frameImageData);
+    } else {
+      // Use ByteTracker (default)
+      if (!byteTrackerRef.current) {
+        const defaultConfig = getAdaptiveConfig(30);
+        byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
+      }
+      
+      detection = byteTrackerRef.current.processFrame(boxes, frameNumber, timestamp);
     }
-    
-    const detection = byteTrackerRef.current.processFrame(boxes, frameNumber, timestamp);
 
     return detection;
   }, [isModelLoaded]);
@@ -144,10 +174,16 @@ export function useObjectDetection() {
 
     setIsProcessing(true);
     setDetections([]);
-    if (byteTrackerRef.current) {
-      byteTrackerRef.current.reset();
+    
+    // Reset the appropriate tracker
+    if (detectionConfig.tracker === 'botsort') {
+      if (botSortRef.current) {
+        botSortRef.current.reset();
+      }
     } else {
-      // console.warn('ByteTracker not initialized before processVideo');
+      if (byteTrackerRef.current) {
+        byteTrackerRef.current.reset();
+      }
     }
 
     // Extract target track ID and head center if using ByteTrack
@@ -191,13 +227,22 @@ export function useObjectDetection() {
           
           if (isFirstFrame || isLastFrame || isSampleFrame) {
             // Process detection immediately for mobile
-            if (!byteTrackerRef.current) {
-              const defaultConfig = getAdaptiveConfig(30);
-              byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
-            }
-            
             const boxes = await detectorRef.current!.detect(imageData, frameNumber);
-            const detection = byteTrackerRef.current.processFrame(boxes, frameNumber, timestamp);
+            let detection: Detection;
+            
+            if (detectionConfig.tracker === 'botsort') {
+              if (!botSortRef.current) {
+                const defaultConfig = getAdaptiveConfig(30);
+                botSortRef.current = new BotSortInterpolator(defaultConfig.botSort);
+              }
+              detection = await botSortRef.current.processFrame(boxes, frameNumber, timestamp, imageData);
+            } else {
+              if (!byteTrackerRef.current) {
+                const defaultConfig = getAdaptiveConfig(30);
+                byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
+              }
+              detection = byteTrackerRef.current.processFrame(boxes, frameNumber, timestamp);
+            }
             detectionFrameCount++;
             
             // Run head detection if needed (same as desktop)
@@ -251,8 +296,9 @@ export function useObjectDetection() {
             // Mobile: Cleaning memory after chunk
             
             // Update UI with current detections
-            if (byteTrackerRef.current) {
-              const currentDetections = byteTrackerRef.current.getAllDetections(frameNumber + 1, metadata.fps);
+            const tracker = getCurrentTracker(byteTrackerRef, botSortRef);
+            if (tracker) {
+              const currentDetections = tracker.getAllDetections(frameNumber + 1, metadata.fps);
               setDetections(currentDetections);
             }
             
@@ -322,16 +368,24 @@ export function useObjectDetection() {
           })()
         ]);
         
-        // Then, process ByteTracker sequentially to maintain temporal consistency
+        // Then, process tracker sequentially to maintain temporal consistency
         for (const task of detectionTasks) {
           const boxes = yoloResults.get(task.frameNumber)!;
+          let detection: Detection;
           
-          if (!byteTrackerRef.current) {
-            const defaultConfig = getAdaptiveConfig(30);
-            byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
+          if (detectionConfig.tracker === 'botsort') {
+            if (!botSortRef.current) {
+              const defaultConfig = getAdaptiveConfig(30);
+              botSortRef.current = new BotSortInterpolator(defaultConfig.botSort);
+            }
+            detection = await botSortRef.current.processFrame(boxes, task.frameNumber, task.timestamp, task.imageData);
+          } else {
+            if (!byteTrackerRef.current) {
+              const defaultConfig = getAdaptiveConfig(30);
+              byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
+            }
+            detection = byteTrackerRef.current.processFrame(boxes, task.frameNumber, task.timestamp);
           }
-          
-          const detection = byteTrackerRef.current.processFrame(boxes, task.frameNumber, task.timestamp);
           detectionFrameCount++;
           
           // Run head detection if needed
@@ -381,12 +435,15 @@ export function useObjectDetection() {
           
           // Update UI periodically
           if (task.frameNumber % 30 === 0 || task.frameNumber === totalFrames - 1) {
-            const currentDetections = byteTrackerRef.current!.getAllDetections(Math.min(task.frameNumber + 1, totalFrames), metadata.fps);
-            setDetections(currentDetections);
-            
-            // Debug log
-            const trackCount = new Set(currentDetections.flatMap(d => d.boxes.map(b => b.trackId)).filter(id => id !== undefined)).size;
-            // Frame processing update
+            const tracker = getCurrentTracker(byteTrackerRef, botSortRef);
+            if (tracker) {
+              const currentDetections = tracker.getAllDetections(Math.min(task.frameNumber + 1, totalFrames), metadata.fps);
+              setDetections(currentDetections);
+              
+              // Debug log
+              const trackCount = new Set(currentDetections.flatMap(d => d.boxes.map(b => b.trackId)).filter(id => id !== undefined)).size;
+              // Frame processing update
+            }
           }
         }
       } else {
@@ -395,13 +452,22 @@ export function useObjectDetection() {
         let processedCount = 0;
         
         for (const task of detectionTasks) {
-          if (!byteTrackerRef.current) {
-            const defaultConfig = getAdaptiveConfig(30);
-            byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
-          }
-          
           const boxes = await detectorRef.current!.detect(task.imageData, task.frameNumber);
-          const detection = byteTrackerRef.current.processFrame(boxes, task.frameNumber, task.timestamp);
+          let detection: Detection;
+          
+          if (detectionConfig.tracker === 'botsort') {
+            if (!botSortRef.current) {
+              const defaultConfig = getAdaptiveConfig(30);
+              botSortRef.current = new BotSortInterpolator(defaultConfig.botSort);
+            }
+            detection = await botSortRef.current.processFrame(boxes, task.frameNumber, task.timestamp, task.imageData);
+          } else {
+            if (!byteTrackerRef.current) {
+              const defaultConfig = getAdaptiveConfig(30);
+              byteTrackerRef.current = new ByteTrackInterpolator(defaultConfig.byteTracker);
+            }
+            detection = byteTrackerRef.current.processFrame(boxes, task.frameNumber, task.timestamp);
+          }
           
           // Mobile: Delete frame data immediately after processing
           if (isMobileDevice) {
@@ -454,8 +520,11 @@ export function useObjectDetection() {
           
           // UI update (same logic as parallel processing)
           if (task.frameNumber % 10 === 0 || task.frameNumber === totalFrames - 1) {
-            const currentDetections = byteTrackerRef.current!.getAllDetections(Math.min(task.frameNumber + 1, totalFrames), metadata.fps);
-            setDetections(currentDetections);
+            const tracker = getCurrentTracker(byteTrackerRef, botSortRef);
+            if (tracker) {
+              const currentDetections = tracker.getAllDetections(Math.min(task.frameNumber + 1, totalFrames), metadata.fps);
+              setDetections(currentDetections);
+            }
           }
           
           // Mobile: Batch memory cleanup
@@ -491,8 +560,12 @@ export function useObjectDetection() {
       // Getting all detections with interpolation
       let allDetections: Detection[];
       
-      // Get all detections with interpolation from ByteTrackInterpolator
-      allDetections = byteTrackerRef.current!.getAllDetections(totalFrames, metadata.fps);
+      // Get all detections with interpolation from tracker
+      const tracker = getCurrentTracker(byteTrackerRef, botSortRef);
+      if (!tracker) {
+        throw new Error('Tracker not initialized');
+      }
+      allDetections = tracker.getAllDetections(totalFrames, metadata.fps);
       // Total detections calculated
       // Head centers are already set by detectFrame for key frames
       // For interpolated frames, we need to interpolate head positions
@@ -650,15 +723,23 @@ export function useObjectDetection() {
       secondDetectorRef.current.setConfidenceThreshold(threshold);
     }
     
-    // Also update ByteTracker thresholds
-    if (byteTrackerRef.current) {
+    // Also update tracker thresholds
+    const defaultConfig = getAdaptiveConfig(30);
+    
+    if (detectionConfig.tracker === 'botsort') {
+      // Reinitialize BoT-SORT with new thresholds
+      botSortRef.current = new BotSortInterpolator({
+        ...defaultConfig.botSort,
+        trackThresh: threshold,
+        lowThresh: Math.max(0.1, threshold * 0.5)
+      });
+      // console.log(`BoT-SORT reinitialized with trackThresh=${threshold}, lowThresh=${Math.max(0.1, threshold * 0.5)}`);
+    } else {
       // Reinitialize ByteTracker with new thresholds
       byteTrackerRef.current = new ByteTrackInterpolator({
-        trackThresh: threshold, // Use the same threshold as detector
-        trackBuffer: 30,
-        matchThresh: 0.5, // Lowered to handle larger movements with 5-frame sampling
-        minBoxArea: 100,
-        lowThresh: Math.max(0.1, threshold * 0.5) // Low threshold is half of main threshold
+        ...defaultConfig.byteTracker,
+        trackThresh: threshold,
+        lowThresh: Math.max(0.1, threshold * 0.5)
       });
       // console.log(`ByteTracker reinitialized with trackThresh=${threshold}, lowThresh=${Math.max(0.1, threshold * 0.5)}`);
     }
@@ -720,6 +801,9 @@ export function useObjectDetection() {
     setHeadOffsetRatio(null);
     if (byteTrackerRef.current) {
       byteTrackerRef.current.reset();
+    }
+    if (botSortRef.current) {
+      botSortRef.current.reset();
     }
   }, []);
 

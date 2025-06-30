@@ -62,11 +62,21 @@ export class WebCodecsExporter {
     
     // Check codec support and find a working codec
     let workingCodec: string | null = null;
-    const codecs = this.outputFormat === 'mp4' 
-      ? ['avc1.42001E', 'avc1.4D401E', 'avc1.64001E'] // Try different H.264 profiles
-      : ['vp09.00.10.08', 'vp9', 'vp8']; // Try VP9 first, then VP8
     
-    for (const codec of codecs) {
+    // Check if HEVC is available (Chrome 107+)
+    const hevcCodecs = ['hev1.1.6.L93.B0', 'hvc1.1.6.L93.B0']; // HEVC Main profile
+    const h264Codecs = ['avc1.42001E', 'avc1.4D401E', 'avc1.64001E']; // H.264 profiles
+    const webmCodecs = ['vp09.00.10.08', 'vp9', 'vp8']; // VP9/VP8
+    
+    let codecsToTry = [];
+    if (this.outputFormat === 'mp4') {
+      // Try HEVC first if available, then H.264
+      codecsToTry = [...hevcCodecs, ...h264Codecs];
+    } else {
+      codecsToTry = webmCodecs;
+    }
+    
+    for (const codec of codecsToTry) {
       try {
         const codecSupport = await VideoEncoder.isConfigSupported({
           codec,
@@ -196,7 +206,26 @@ export class WebCodecsExporter {
     
     // Try to find a working codec
     // More H.264 profiles to try
-    const mp4Codecs = [
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    
+    // Check Chrome version for HEVC support
+    const chromeVersion = /Chrome\/(\d+)/.exec(navigator.userAgent);
+    const supportsHEVC = chromeVersion && parseInt(chromeVersion[1]) >= 107;
+    
+    // HEVC codecs
+    const hevcCodecs = [
+      'hev1.1.6.L93.B0',  // HEVC Main profile, Level 3.1
+      'hvc1.1.6.L93.B0',  // Alternative HEVC Main profile
+      'hev1.2.4.L120.B0', // HEVC Main 10 profile
+    ];
+    
+    // iOS prefers baseline profile with lower levels
+    const h264Codecs = isIOS ? [
+      'avc1.42000d', // Baseline Profile Level 1.3 (lowest)
+      'avc1.420014', // Baseline Profile Level 2.0
+      'avc1.42001E', // Baseline Profile Level 3.0
+      'avc1.42E01E', // Baseline Profile Level 3.0 (alternate)
+    ] : [
       'avc1.42E01E', // Baseline Profile Level 3.0
       'avc1.42001E', // Baseline Profile Level 3.0 (alternate)
       'avc1.420014', // Baseline Profile Level 2.0
@@ -206,6 +235,9 @@ export class WebCodecsExporter {
       'avc1.640028', // High Profile Level 4.0
       'avc1.640029'  // High Profile Level 4.1
     ];
+    
+    // Combine codecs - try HEVC first if supported
+    const mp4Codecs = supportsHEVC ? [...hevcCodecs, ...h264Codecs] : h264Codecs;
     const webmCodecs = ['vp09.00.10.08', 'vp9', 'vp8'];
     const codecs = this.outputFormat === 'mp4' ? mp4Codecs : webmCodecs;
     
@@ -291,6 +323,7 @@ export class WebCodecsExporter {
     if (codec.startsWith('avc')) {
       config.avc = { format: 'avc' };
     }
+    // HEVC doesn't need additional config object
     // Use the hardware acceleration option that was found to work
     config.hardwareAcceleration = this.hardwareAcceleration;
 
@@ -396,15 +429,29 @@ export class WebCodecsExporter {
     let canvas: HTMLCanvasElement | OffscreenCanvas;
     let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
     
-    // Try OffscreenCanvas first, fallback to regular canvas
-    try {
-      canvas = new OffscreenCanvas(outputWidth, outputHeight);
-      ctx = canvas.getContext('2d', {
-        alpha: false,
-        desynchronized: true
-      });
-    } catch (e) {
-      console.log('[WebCodecs Export] OffscreenCanvas not available, using regular canvas');
+    // Check if iOS - avoid OffscreenCanvas on iOS
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    
+    // Try OffscreenCanvas first (except on iOS), fallback to regular canvas
+    if (!isIOS && typeof OffscreenCanvas !== 'undefined') {
+      try {
+        canvas = new OffscreenCanvas(outputWidth, outputHeight);
+        ctx = canvas.getContext('2d', {
+          alpha: false,
+          desynchronized: true
+        });
+      } catch (e) {
+        console.log('[WebCodecs Export] OffscreenCanvas failed, using regular canvas');
+        canvas = document.createElement('canvas');
+        canvas.width = outputWidth;
+        canvas.height = outputHeight;
+        ctx = canvas.getContext('2d', {
+          alpha: false,
+          willReadFrequently: true
+        });
+      }
+    } else {
+      console.log('[WebCodecs Export] Using regular canvas (iOS or OffscreenCanvas not available)');
       canvas = document.createElement('canvas');
       canvas.width = outputWidth;
       canvas.height = outputHeight;
@@ -486,14 +533,32 @@ export class WebCodecsExporter {
           console.log(`[WebCodecs Export] Creating frame ${frameNumber}/${this.totalFrames}`);
         }
         
-        // Always use ImageBitmap approach for better compatibility
+        // Check if iOS - they have specific requirements
+        const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+        
         try {
-          const bitmap = await createImageBitmap(canvas as any);
-          frame = new VideoFrame(bitmap, {
-            timestamp,
-            duration: Math.floor(1000000 / metadata.fps)
-          });
-          bitmap.close();
+          if (isIOS && canvas instanceof HTMLCanvasElement) {
+            // For iOS with HTMLCanvas, convert to ImageData first to avoid BGRA issues
+            const imageData = ctx.getImageData(0, 0, outputWidth, outputHeight);
+            
+            // Create ImageBitmap from ImageData
+            const bitmap = await createImageBitmap(imageData);
+            frame = new VideoFrame(bitmap, {
+              timestamp,
+              duration: Math.floor(1000000 / metadata.fps),
+              displayWidth: outputWidth,
+              displayHeight: outputHeight
+            });
+            bitmap.close();
+          } else {
+            // For other platforms, use standard approach
+            const bitmap = await createImageBitmap(canvas as any);
+            frame = new VideoFrame(bitmap, {
+              timestamp,
+              duration: Math.floor(1000000 / metadata.fps)
+            });
+            bitmap.close();
+          }
         } catch (bitmapError) {
           console.error('[WebCodecs Export] ImageBitmap approach failed:', bitmapError);
           
@@ -527,8 +592,12 @@ export class WebCodecsExporter {
             const view = new Uint8Array(buffer);
             view.set(imageData.data);
             
+            // iOS Safari may have issues with RGBA/BGRA, try I420
+            const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+            const format = isIOS ? 'I420' : 'RGBA';
+            
             frame = new VideoFrame(view, {
-              format: 'RGBA',
+              format,
               timestamp,
               codedWidth: outputWidth,
               codedHeight: outputHeight,

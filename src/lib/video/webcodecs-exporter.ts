@@ -17,6 +17,9 @@ export class WebCodecsExporter {
   private decoderConfig: any = null;
   private encoderError: any = null;
   private hardwareAcceleration: HardwareAcceleration = 'no-preference';
+  private lastFrameHash: string = '';
+  private duplicateFrameCount: number = 0;
+  private frameHashCache: Map<number, string> = new Map();
 
   async export(
     videoElement: HTMLVideoElement,
@@ -454,13 +457,37 @@ export class WebCodecsExporter {
     // Mobile optimization: Process frames in smaller batches
     const batchSize = this.isMobile ? 10 : 30;
     console.log(`[WebCodecs Export] Processing frames in batches of ${batchSize}`);
+    
+    // Mobile optimization: Adaptive frame processing
+    let frameSkip = 1;
+    if (this.isMobile) {
+      // For mobile, consider reducing frame rate if original is high
+      if (metadata.fps > 30) {
+        frameSkip = 2; // Process every other frame for 60fps videos
+        console.log(`[WebCodecs Export] Mobile: Reducing framerate from ${metadata.fps} to ${metadata.fps / frameSkip}`);
+      }
+    }
 
     // Process each frame
-    for (let frameNumber = 0; frameNumber < this.totalFrames; frameNumber++) {
+    for (let frameNumber = 0; frameNumber < this.totalFrames; frameNumber += frameSkip) {
       const timestamp = (frameNumber / metadata.fps) * 1000000; // microseconds
+      const duration = (frameSkip / metadata.fps) * 1000000; // Adjust duration for skipped frames
       
-      // Seek to frame
-      await this.seekToFrame(exportVideo, frameNumber / metadata.fps);
+      // Mobile optimization: Skip duplicate frames
+      if (this.isMobile && frameNumber > 0) {
+        // Check if we should re-seek based on duplicate frames
+        if (this.duplicateFrameCount > 2) {
+          console.log(`[WebCodecs Export] Too many duplicates at frame ${frameNumber}, attempting re-seek`);
+          // Try seeking with a small offset
+          const offsetTime = (frameNumber / metadata.fps) + 0.001;
+          await this.seekToFrame(exportVideo, offsetTime);
+          this.duplicateFrameCount = 0;
+        } else {
+          await this.seekToFrame(exportVideo, frameNumber / metadata.fps);
+        }
+      } else {
+        await this.seekToFrame(exportVideo, frameNumber / metadata.fps);
+      }
       
       // Ensure video is ready to be drawn
       if (exportVideo.readyState < 2) {
@@ -513,6 +540,21 @@ export class WebCodecsExporter {
         ctx.fillStyle = 'black';
         ctx.fillRect(0, 0, outputWidth, outputHeight);
       }
+      
+      // Mobile: Check for duplicate frames
+      if (this.isMobile && frameNumber > 0) {
+        const frameHash = this.calculateFrameHash(ctx, outputWidth, outputHeight);
+        
+        if (frameHash === this.lastFrameHash) {
+          this.duplicateFrameCount++;
+          console.log(`[WebCodecs Export] Duplicate frame detected at ${frameNumber} (count: ${this.duplicateFrameCount})`);
+        } else {
+          this.duplicateFrameCount = 0;
+        }
+        
+        this.lastFrameHash = frameHash;
+        this.frameHashCache.set(frameNumber, frameHash);
+      }
 
       // Create VideoFrame from canvas with proper configuration
       let frame: VideoFrame | null = null;
@@ -539,7 +581,7 @@ export class WebCodecsExporter {
             const bitmap = await createImageBitmap(imageData);
             frame = new VideoFrame(bitmap, {
               timestamp,
-              duration: Math.floor(1000000 / metadata.fps),
+              duration: duration || Math.floor(1000000 / metadata.fps),
               displayWidth: outputWidth,
               displayHeight: outputHeight
             });
@@ -549,7 +591,7 @@ export class WebCodecsExporter {
             const bitmap = await createImageBitmap(canvas as any);
             frame = new VideoFrame(bitmap, {
               timestamp,
-              duration: Math.floor(1000000 / metadata.fps)
+              duration: duration || Math.floor(1000000 / metadata.fps)
             });
             bitmap.close();
           }
@@ -569,7 +611,7 @@ export class WebCodecsExporter {
                 const tempBitmap = await createImageBitmap(tempCanvas);
                 frame = new VideoFrame(tempBitmap, {
                   timestamp,
-                  duration: Math.floor(1000000 / metadata.fps)
+                  duration: duration || Math.floor(1000000 / metadata.fps)
                 });
                 tempBitmap.close();
               } else {
@@ -596,7 +638,7 @@ export class WebCodecsExporter {
               codedWidth: outputWidth,
               codedHeight: outputHeight,
               visibleRect: { x: 0, y: 0, width: outputWidth, height: outputHeight },
-              duration: Math.floor(1000000 / metadata.fps)
+              duration: duration || Math.floor(1000000 / metadata.fps)
             });
           }
         }
@@ -663,7 +705,7 @@ export class WebCodecsExporter {
         }
       }
 
-      this.processedFrames++;
+      this.processedFrames += frameSkip;
       
       // Update progress
       if (this.onProgress) {
@@ -701,8 +743,22 @@ export class WebCodecsExporter {
         if (timeoutId) clearTimeout(timeoutId);
       };
       
-      const onSeeked = () => {
+      const onSeeked = async () => {
         cleanup();
+        
+        // Mobile: Add extra stabilization time
+        if (this.isMobile) {
+          await new Promise(r => setTimeout(r, 50));
+          
+          // Verify seek accuracy
+          const actualTime = videoElement.currentTime;
+          const timeDiff = Math.abs(actualTime - time);
+          
+          if (timeDiff > 0.1) {
+            console.warn(`[WebCodecs Export] Seek inaccuracy: requested ${time}s, got ${actualTime}s (diff: ${timeDiff}s)`);
+          }
+        }
+        
         resolve();
       };
       
@@ -903,6 +959,30 @@ export class WebCodecsExporter {
     }
   }
 
+  private calculateFrameHash(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, width: number, height: number): string {
+    // Sample a small area in the center for performance
+    const sampleSize = 32;
+    const x = Math.floor((width - sampleSize) / 2);
+    const y = Math.floor((height - sampleSize) / 2);
+    
+    try {
+      const imageData = ctx.getImageData(x, y, sampleSize, sampleSize);
+      
+      // Simple hash calculation using sampled pixels
+      let hash = 0;
+      for (let i = 0; i < imageData.data.length; i += 16) {
+        // Sample every 16th pixel for speed
+        hash = ((hash << 5) - hash) + imageData.data[i];
+        hash = hash & hash; // Convert to 32-bit integer
+      }
+      
+      return hash.toString(16);
+    } catch (e) {
+      console.warn('[WebCodecs Export] Failed to calculate frame hash:', e);
+      return Math.random().toString(16);
+    }
+  }
+
   private cleanup() {
     console.log('[WebCodecs Export] Cleaning up encoder/decoder');
     if (this.encoder) {
@@ -931,5 +1011,8 @@ export class WebCodecsExporter {
     this.encodedChunks = [];
     this.encoderError = null;
     this.decoderConfig = null;
+    this.frameHashCache.clear();
+    this.lastFrameHash = '';
+    this.duplicateFrameCount = 0;
   }
 }

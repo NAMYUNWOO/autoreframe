@@ -47,7 +47,7 @@ export class WebCodecsExporter {
     this.isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
       navigator.userAgent.toLowerCase()
     );
-
+    
     // Calculate output dimensions
     const { width: outputWidth, height: outputHeight } = getOutputDimensions(
       metadata.width,
@@ -63,15 +63,14 @@ export class WebCodecsExporter {
     // Check codec support and find a working codec
     let workingCodec: string | null = null;
     
-    // Check if HEVC is available (Chrome 107+)
-    const hevcCodecs = ['hev1.1.6.L93.B0', 'hvc1.1.6.L93.B0']; // HEVC Main profile
+    // Always prefer H.264 for maximum compatibility
     const h264Codecs = ['avc1.42001E', 'avc1.4D401E', 'avc1.64001E']; // H.264 profiles
     const webmCodecs = ['vp09.00.10.08', 'vp9', 'vp8']; // VP9/VP8
     
     let codecsToTry = [];
     if (this.outputFormat === 'mp4') {
-      // Try HEVC first if available, then H.264
-      codecsToTry = [...hevcCodecs, ...h264Codecs];
+      // Always use H.264 for MP4 - best compatibility across all platforms
+      codecsToTry = h264Codecs;
     } else {
       codecsToTry = webmCodecs;
     }
@@ -208,17 +207,6 @@ export class WebCodecsExporter {
     // More H.264 profiles to try
     const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
     
-    // Check Chrome version for HEVC support
-    const chromeVersion = /Chrome\/(\d+)/.exec(navigator.userAgent);
-    const supportsHEVC = chromeVersion && parseInt(chromeVersion[1]) >= 107;
-    
-    // HEVC codecs
-    const hevcCodecs = [
-      'hev1.1.6.L93.B0',  // HEVC Main profile, Level 3.1
-      'hvc1.1.6.L93.B0',  // Alternative HEVC Main profile
-      'hev1.2.4.L120.B0', // HEVC Main 10 profile
-    ];
-    
     // iOS prefers baseline profile with lower levels
     const h264Codecs = isIOS ? [
       'avc1.42000d', // Baseline Profile Level 1.3 (lowest)
@@ -236,10 +224,9 @@ export class WebCodecsExporter {
       'avc1.640029'  // High Profile Level 4.1
     ];
     
-    // Combine codecs - try HEVC first if supported
-    const mp4Codecs = supportsHEVC ? [...hevcCodecs, ...h264Codecs] : h264Codecs;
+    // Always use H.264 for MP4 for maximum compatibility
     const webmCodecs = ['vp09.00.10.08', 'vp9', 'vp8'];
-    const codecs = this.outputFormat === 'mp4' ? mp4Codecs : webmCodecs;
+    const codecs = this.outputFormat === 'mp4' ? h264Codecs : webmCodecs;
     
     let selectedCodec: string | null = null;
     
@@ -323,7 +310,6 @@ export class WebCodecsExporter {
     if (codec.startsWith('avc')) {
       config.avc = { format: 'avc' };
     }
-    // HEVC doesn't need additional config object
     // Use the hardware acceleration option that was found to work
     config.hardwareAcceleration = this.hardwareAcceleration;
 
@@ -495,8 +481,10 @@ export class WebCodecsExporter {
       const transform = transforms.get(frameNumber);
       
       // Apply transform and draw frame
+      let drawSuccess = false;
+      
       if (transform) {
-        this.applyTransform(
+        drawSuccess = await this.applyTransformSafe(
           ctx,
           exportVideo,
           transform,
@@ -512,12 +500,18 @@ export class WebCodecsExporter {
         ctx.fillRect(0, 0, outputWidth, outputHeight);
         try {
           ctx.drawImage(exportVideo, 0, 0, outputWidth, outputHeight);
+          drawSuccess = true;
         } catch (e) {
           console.error('[WebCodecs Export] Error drawing video frame:', e);
-          // Draw black frame as fallback
-          ctx.fillStyle = 'black';
-          ctx.fillRect(0, 0, outputWidth, outputHeight);
+          drawSuccess = false;
         }
+      }
+      
+      // If drawing failed (likely HEVC on iOS), skip this frame or use a black frame
+      if (!drawSuccess) {
+        console.warn(`[WebCodecs Export] Failed to draw frame ${frameNumber}, using black frame`);
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, outputWidth, outputHeight);
       }
 
       // Create VideoFrame from canvas with proper configuration
@@ -738,6 +732,25 @@ export class WebCodecsExporter {
         resolve();
       }, 5000);
     });
+  }
+
+  private async applyTransformSafe(
+    ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+    video: HTMLVideoElement,
+    transform: FrameTransform,
+    outputWidth: number,
+    outputHeight: number,
+    metadata: VideoMetadata,
+    reframingConfig?: ReframingConfig,
+    initialTargetBox?: { width: number; height: number }
+  ): Promise<boolean> {
+    try {
+      this.applyTransform(ctx, video, transform, outputWidth, outputHeight, metadata, reframingConfig, initialTargetBox);
+      return true;
+    } catch (e) {
+      console.error('[WebCodecs Export] Error in applyTransformSafe:', e);
+      return false;
+    }
   }
 
   private applyTransform(

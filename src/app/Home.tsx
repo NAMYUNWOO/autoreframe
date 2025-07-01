@@ -25,6 +25,7 @@ export default function Home() {
   const [selectedTrackIdForByteTrack, setSelectedTrackIdForByteTrack] = useState<string | null>(null);
   const [initialTargetBox, setInitialTargetBox] = useState<{ width: number; height: number } | null>(null);
   const [startedFromHeadSelector, setStartedFromHeadSelector] = useState(false);
+  const [sampleInterval, setSampleInterval] = useState(5); // Default to 5
 
   const {
     videoFile,
@@ -106,7 +107,7 @@ export default function Home() {
     if (!metadata) return;
     
     try {
-      await processVideo(processFrames, metadata);
+      await processVideo(processFrames, metadata, sampleInterval);
       setDetectionComplete(true);
       
       // If we have a selected track ID, select it
@@ -116,7 +117,7 @@ export default function Home() {
     } catch (error) {
       // console.error('Error during detection:', error);
     }
-  }, [processVideo, processFrames, metadata, selectedTrackIdForByteTrack, selectByteTrackId]);
+  }, [processVideo, processFrames, metadata, sampleInterval, selectedTrackIdForByteTrack, selectByteTrackId]);
 
   const handleReframing = useCallback(async () => {
     if (!metadata || !detections.length) return;
@@ -211,10 +212,14 @@ export default function Home() {
     setTargetHead(detection);
   }, [setTargetHead]);
 
-  const handleHeadSelectorConfirm = useCallback((reframingConfig?: any) => {
+  const handleHeadSelectorConfirm = useCallback((reframingConfig?: any, sampleInterval?: number) => {
     // Apply reframing config if provided
     if (reframingConfig) {
       updateConfig(reframingConfig);
+    }
+    // Update sample interval if provided
+    if (sampleInterval !== undefined) {
+      setSampleInterval(sampleInterval);
     }
     setShowHeadSelector(false);
     setStartedFromHeadSelector(true); // Mark that we started from head selector
@@ -407,6 +412,8 @@ export default function Home() {
                   onConfidenceChange={handleConfidenceChange}
                   onGetDetectionInfo={handleGetDetectionInfo}
                   metadata={metadata}
+                  sampleInterval={sampleInterval}
+                  onSampleIntervalChange={setSampleInterval}
                 />
               )}
 
@@ -459,8 +466,8 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Detection Settings - Only show if not started from HeadSelector */}
-              {detectionComplete && !showHeadSelector && !showTrajectoryEditor && !startedFromHeadSelector && (
+              {/* Detection Settings - Only show detection overlays after detection is complete */}
+              {detectionComplete && !showHeadSelector && !showTrajectoryEditor && (
                 <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10">
                   <DetectionOverlay
                     trackedObjects={trackedObjects}

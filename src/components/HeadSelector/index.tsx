@@ -9,11 +9,13 @@ import { getAdaptiveConfig } from '@/config/detection-adaptive';
 interface HeadSelectorProps {
   videoElement: HTMLVideoElement | null;
   onSelectHead: (box: BoundingBox) => void;
-  onConfirm: (reframingConfig?: ReframingConfig) => void;
+  onConfirm: (reframingConfig?: ReframingConfig, sampleInterval?: number) => void;
   confidenceThreshold?: number;
   onConfidenceChange?: (value: number) => void;
   onGetDetectionInfo?: () => void;
   metadata?: VideoMetadata | null;
+  sampleInterval?: number;
+  onSampleIntervalChange?: (interval: number) => void;
 }
 
 export function HeadSelector({ 
@@ -23,7 +25,9 @@ export function HeadSelector({
   confidenceThreshold = 0.3,
   onConfidenceChange,
   onGetDetectionInfo,
-  metadata
+  metadata,
+  sampleInterval = 5,
+  onSampleIntervalChange
 }: HeadSelectorProps) {
   const [detections, setDetections] = useState<BoundingBox[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -609,7 +613,7 @@ export function HeadSelector({
         reframeBoxSize,
         reframeBoxOffset
       };
-      onConfirm(enhancedConfig);
+      onConfirm(enhancedConfig, sampleInterval);
     }
   };
 
@@ -690,6 +694,52 @@ export function HeadSelector({
                 />
                 <div className="text-xs text-gray-400 mt-1">
                   Lower values detect more objects but may include false positives
+                </div>
+              </div>
+            )}
+
+            {/* Sample Interval */}
+            {onSampleIntervalChange && (
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Detection Frame Interval
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => onSampleIntervalChange(1)}
+                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      sampleInterval === 1
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Every Frame
+                  </button>
+                  <button
+                    onClick={() => onSampleIntervalChange(3)}
+                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      sampleInterval === 3
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Every 3rd
+                  </button>
+                  <button
+                    onClick={() => onSampleIntervalChange(5)}
+                    className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                      sampleInterval === 5
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    Every 5th
+                  </button>
+                </div>
+                <div className="text-xs text-gray-400 mt-1">
+                  {sampleInterval === 1 ? 'Most accurate but slowest' : 
+                   sampleInterval === 3 ? 'Balanced speed and accuracy' : 
+                   'Fastest processing (default)'}
                 </div>
               </div>
             )}

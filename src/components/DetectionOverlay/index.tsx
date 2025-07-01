@@ -11,6 +11,8 @@ interface DetectionOverlayProps {
   onToggleReframing: () => void;
   confidenceThreshold: number;
   onConfidenceChange: (threshold: number) => void;
+  sampleInterval?: number;
+  onSampleIntervalChange?: (interval: number) => void;
 }
 
 export function DetectionOverlay({
@@ -21,7 +23,9 @@ export function DetectionOverlay({
   onToggleDetections,
   onToggleReframing,
   confidenceThreshold,
-  onConfidenceChange
+  onConfidenceChange,
+  sampleInterval = 5,
+  onSampleIntervalChange
 }: DetectionOverlayProps) {
   return (
     <div className="w-full">
@@ -72,6 +76,52 @@ export function DetectionOverlay({
           Current value: {confidenceThreshold.toFixed(2)} ({(confidenceThreshold * 100).toFixed(0)}%)
         </div>
       </div>
+
+      {/* Sample Interval */}
+      {onSampleIntervalChange && (
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-200 mb-2">
+            Detection Frame Interval
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              onClick={() => onSampleIntervalChange(1)}
+              className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                sampleInterval === 1
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              Every Frame
+            </button>
+            <button
+              onClick={() => onSampleIntervalChange(3)}
+              className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                sampleInterval === 3
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              Every 3rd
+            </button>
+            <button
+              onClick={() => onSampleIntervalChange(5)}
+              className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                sampleInterval === 5
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              Every 5th
+            </button>
+          </div>
+          <div className="text-xs text-gray-400 mt-1">
+            {sampleInterval === 1 ? 'Most accurate but slowest' : 
+             sampleInterval === 3 ? 'Balanced speed and accuracy' : 
+             'Fastest processing (default)'}
+          </div>
+        </div>
+      )}
 
       {/* Tracked Objects Summary */}
       {trackedObjects.length > 0 && (

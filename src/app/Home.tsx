@@ -352,11 +352,11 @@ export default function Home() {
         {currentStep === 'upload' && (
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold text-white mb-4">
-                Upload Your Video
-              </h2>
+              <h1 className="text-3xl font-bold text-white mb-4">
+                AI Video Reframing - Auto Crop Videos for Social Media
+              </h1>
               <p className="text-gray-400">
-                Automatically detect and track persons to create perfectly framed videos
+                Free online tool to automatically detect and track persons. Convert landscape videos to portrait for Instagram Reels, TikTok, and YouTube Shorts.
               </p>
             </div>
             

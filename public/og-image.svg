@@ -1,0 +1,33 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="url(#gradient)"/>
+  
+  <!-- Logo and Title -->
+  <g transform="translate(600, 240)">
+    <!-- Video Icon -->
+    <rect x="-80" y="-40" width="160" height="80" rx="8" fill="#3B82F6" opacity="0.2"/>
+    <path d="M-40 -20 L-40 20 L20 0 Z" fill="#3B82F6"/>
+    
+    <!-- Title -->
+    <text x="0" y="80" text-anchor="middle" fill="white" font-family="Arial, sans-serif" font-size="48" font-weight="bold">
+      AutoReframer
+    </text>
+    
+    <!-- Subtitle -->
+    <text x="0" y="120" text-anchor="middle" fill="#94A3B8" font-family="Arial, sans-serif" font-size="24">
+      AI-Powered Video Reframing Tool
+    </text>
+    
+    <!-- Features -->
+    <text x="0" y="180" text-anchor="middle" fill="#CBD5E1" font-family="Arial, sans-serif" font-size="18">
+      Auto Crop • Person Tracking • Multiple Aspect Ratios • No Watermark
+    </text>
+  </g>
+  
+  <!-- Gradient Background -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1E293B;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0F172A;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+</svg>

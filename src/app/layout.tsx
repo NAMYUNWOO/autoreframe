@@ -15,8 +15,54 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AutoReframer - AI Video Reframing",
-  description: "Automatically reframe videos for social media using AI object detection",
+  title: "AutoReframer - AI Video Reframing Tool | Auto Crop Videos for Social Media",
+  description: "Free online AI-powered video reframing tool. Automatically crop and resize videos for Instagram, TikTok, YouTube Shorts. Smart person tracking, aspect ratio conversion (16:9, 9:16, 1:1), no watermark.",
+  keywords: "video reframing, AI video crop, auto crop video, resize video for Instagram, TikTok video resizer, YouTube Shorts converter, aspect ratio converter, person tracking, video editing tool, free video editor",
+  authors: [{ name: "AutoReframer Team" }],
+  creator: "AutoReframer",
+  publisher: "AutoReframer",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  metadataBase: new URL("https://autoreframe.vercel.app"),
+  alternates: {
+    canonical: "/",
+  },
+  openGraph: {
+    title: "AutoReframer - AI Video Reframing Tool",
+    description: "Free AI-powered tool to automatically reframe videos for social media. Smart person tracking, multiple aspect ratios, no watermark.",
+    url: "https://autoreframe.vercel.app",
+    siteName: "AutoReframer",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "AutoReframer - AI Video Reframing Tool",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AutoReframer - AI Video Reframing Tool",
+    description: "Free AI tool to automatically reframe videos for social media platforms",
+    images: ["/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 export default function RootLayout({
@@ -33,6 +79,34 @@ export default function RootLayout({
           {children}
           <Analytics />
         </ErrorBoundary>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              "name": "AutoReframer",
+              "description": "AI-powered video reframing tool for social media",
+              "url": "https://autoreframe.vercel.app",
+              "applicationCategory": "MultimediaApplication",
+              "operatingSystem": "Web Browser",
+              "offers": {
+                "@type": "Offer",
+                "price": "0",
+                "priceCurrency": "USD"
+              },
+              "featureList": [
+                "AI person detection and tracking",
+                "Automatic video reframing",
+                "Multiple aspect ratio support (16:9, 9:16, 1:1, 4:5)",
+                "No watermark",
+                "Client-side processing",
+                "Export to MP4"
+              ],
+              "screenshot": "https://autoreframe.vercel.app/og-image.png"
+            })
+          }}
+        />
       </body>
     </html>
   );

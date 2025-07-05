@@ -173,7 +173,8 @@ export class ReframingEngine {
     selectedTrack: TrackedObject | null,
     frameWidth: number,
     frameHeight: number,
-    fps: number = 30
+    fps: number,
+    totalFrames?: number
   ): Map<number, FrameTransform> {
     // Reset smoother and calculator for new sequence
     this.smoother.reset();
@@ -189,8 +190,8 @@ export class ReframingEngine {
       detectionMap.set(detection.frameNumber, detection);
     }
 
-    // Get total frames from detections
-    const maxFrame = Math.max(...detections.map(d => d.frameNumber));
+    // Use provided totalFrames if available, otherwise get from detections
+    const maxFrame = totalFrames ? totalFrames - 1 : Math.max(...detections.map(d => d.frameNumber));
     
     // Process every frame since ByteTrack provides interpolated data
     // console.log(`ReframingEngine: Processing ${maxFrame + 1} frames with ByteTrack interpolated data`);

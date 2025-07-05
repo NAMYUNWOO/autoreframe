@@ -6,6 +6,7 @@ const nextConfig: NextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       '@': path.resolve(__dirname, 'src'),
+      'MediaInfoModule.wasm': path.resolve(__dirname, 'public/MediaInfoModule.wasm'),
     };
     
     // Handle ONNX files
@@ -21,6 +22,18 @@ const nextConfig: NextConfig = {
       fs: false,
       crypto: false,
     };
+    
+    // Handle WASM files
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: 'asset/resource',
+    });
+    
+    
+    // Ignore mediainfo.js on server side to avoid SSR issues
+    if (isServer) {
+      config.externals = [...(config.externals || []), 'mediainfo.js'];
+    }
     
     return config;
   },

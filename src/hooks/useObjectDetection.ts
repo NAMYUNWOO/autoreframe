@@ -166,7 +166,7 @@ export function useObjectDetection() {
 
   const processVideo = useCallback(async (
     processFrames: (onFrame: (imageData: ImageData, frameNumber: number, timestamp: number) => Promise<void>) => Promise<void>,
-    metadata: { fps: number; duration: number },
+    metadata: { fps: number; duration: number; totalFrames?: number },
     customSampleInterval?: number
   ) => {
     if (!isModelLoaded) {
@@ -197,7 +197,7 @@ export function useObjectDetection() {
       }
     }
 
-    const totalFrames = Math.floor(metadata.fps * metadata.duration);
+    const totalFrames = metadata.totalFrames || Math.round(metadata.fps * metadata.duration);
     // When using ByteTracker, we should only call it on frames where we actually run detection
     // to avoid breaking temporal consistency
     const sampleInterval = customSampleInterval || detectionConfig.sampleInterval; // Use custom or config value

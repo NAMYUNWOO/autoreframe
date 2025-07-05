@@ -33,13 +33,22 @@ export class WebCodecsExporter {
   ): Promise<Blob> {
     this.onProgress = onProgress;
     this.processedFrames = 0;
-    this.totalFrames = Math.floor(metadata.duration * metadata.fps);
+    // Use exact frame count from metadata if available
+    const exactFrames = metadata.totalFrames;
+    const calculatedFrames = Math.round(metadata.duration * metadata.fps);
+    // Also check the transforms map for the actual number of frames to process
+    const transformsMaxFrame = transforms.size > 0 ? Math.max(...Array.from(transforms.keys())) + 1 : 0;
+    // Use exact frames if available, otherwise use the larger of calculated or transforms
+    this.totalFrames = exactFrames || Math.max(calculatedFrames, transformsMaxFrame);
+    console.log(`[WebCodecs Export] Total frames - exact: ${exactFrames}, calculated: ${calculatedFrames}, transforms: ${transformsMaxFrame}, using: ${this.totalFrames}`);
     this.encodedChunks = [];
     this.encoderError = null;
 
     console.log('[WebCodecs Export] Starting export...');
     console.log('[WebCodecs Export] Total frames:', this.totalFrames);
     console.log('[WebCodecs Export] Output format:', options.format || 'mp4');
+    console.log('[WebCodecs Export] Is mobile:', this.isMobile);
+    console.log('[WebCodecs Export] FPS:', metadata.fps);
     
     // Set output format
     // Use requested format or default to MP4
@@ -469,9 +478,11 @@ export class WebCodecsExporter {
     }
 
     // Process each frame
+    let actualFramesProcessed = 0;
     for (let frameNumber = 0; frameNumber < this.totalFrames; frameNumber += frameSkip) {
       const timestamp = (frameNumber / metadata.fps) * 1000000; // microseconds
       const duration = (frameSkip / metadata.fps) * 1000000; // Adjust duration for skipped frames
+      actualFramesProcessed++;
       
       // Mobile optimization: Skip duplicate frames
       if (this.isMobile && frameNumber > 0) {
@@ -724,6 +735,11 @@ export class WebCodecsExporter {
     if (this.encoder && this.encoder.state === 'configured') {
       await this.encoder.flush();
       console.log('[WebCodecs Export] Encoding complete');
+      console.log('[WebCodecs Export] Processed frames:', this.processedFrames);
+      console.log('[WebCodecs Export] Expected frames:', this.totalFrames);
+      console.log('[WebCodecs Export] Actual frames processed:', actualFramesProcessed);
+      console.log('[WebCodecs Export] Frame skip:', frameSkip);
+      console.log('[WebCodecs Export] Encoded chunks:', this.encodedChunks.length);
     }
     
     // Clean up export video element and canvas

@@ -4,6 +4,7 @@ export interface VideoMetadata {
   height: number;
   fps: number;
   rotation?: number;
+  totalFrames?: number; // Exact frame count from MediaInfo
 }
 
 export interface BoundingBox {

@@ -56,12 +56,16 @@ export function useReframing() {
 
     setIsProcessing(true);
     try {
+      // Use exact frame count from metadata if available
+      const totalFrames = metadata.totalFrames || Math.round(metadata.duration * metadata.fps);
+      
       const frameTransforms = engineRef.current.processAllFrames(
         detections,
         selectedTrack,
         metadata.width,
         metadata.height,
-        metadata.fps
+        metadata.fps,
+        totalFrames
       );
       
       setTransforms(frameTransforms);

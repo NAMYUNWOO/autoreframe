@@ -1,5 +1,7 @@
 import { VideoMetadata, Detection, ProcessingStatus } from '@/types';
 import { VideoRotationDetector } from './rotation-detector';
+// MediaInfo types
+type ReadChunkFunc = (chunkSize: number, offset: number) => Promise<Uint8Array>;
 
 export class VideoProcessor {
   private video: HTMLVideoElement;
@@ -19,44 +21,136 @@ export class VideoProcessor {
   }
 
   async loadVideo(file: File): Promise<VideoMetadata> {
-    return new Promise((resolve, reject) => {
-      const url = URL.createObjectURL(file);
-      this.video.src = url;
+    try {
+      // First, extract metadata using MediaInfo.js
+      console.log('[VideoProcessor] Extracting metadata with MediaInfo.js...');
+      const mediaInfo = await this.extractMediaInfo(file);
       
-      this.video.onloadedmetadata = async () => {
-        // Detect video rotation
-        this.videoRotation = await VideoRotationDetector.detectRotation(this.video);
-        // console.log('Detected video rotation:', this.videoRotation);
+      // Then load the video for playback
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        this.video.src = url;
         
-        // Get corrected dimensions
-        const correctedDims = VideoRotationDetector.getCorrectedDimensions(
-          this.video.videoWidth,
-          this.video.videoHeight,
-          this.videoRotation
-        );
-        
-        this.metadata = {
-          duration: this.video.duration,
-          width: correctedDims.width,
-          height: correctedDims.height,
-          fps: 30, // Default, will be calculated more accurately
-          rotation: this.videoRotation
+        this.video.onloadedmetadata = async () => {
+          // Detect video rotation
+          this.videoRotation = await VideoRotationDetector.detectRotation(this.video);
+          console.log('[VideoProcessor] Detected video rotation:', this.videoRotation);
+          
+          // Get corrected dimensions
+          const correctedDims = VideoRotationDetector.getCorrectedDimensions(
+            this.video.videoWidth,
+            this.video.videoHeight,
+            this.videoRotation
+          );
+          
+          // Use MediaInfo data if available, fallback to estimation
+          const fps = mediaInfo.fps || await this.estimateFPS();
+          const totalFrames = mediaInfo.totalFrames || Math.round(this.video.duration * fps);
+          
+          this.metadata = {
+            duration: this.video.duration,
+            width: correctedDims.width,
+            height: correctedDims.height,
+            fps: fps,
+            rotation: this.videoRotation,
+            totalFrames: totalFrames
+          };
+          
+          console.log('[VideoProcessor] Video metadata:', {
+            duration: this.metadata.duration,
+            fps: this.metadata.fps,
+            totalFrames: this.metadata.totalFrames,
+            resolution: `${this.metadata.width}x${this.metadata.height}`
+          });
+          
+          this.canvas.width = this.metadata.width;
+          this.canvas.height = this.metadata.height;
+          
+          resolve(this.metadata);
         };
         
-        this.canvas.width = this.metadata.width;
-        this.canvas.height = this.metadata.height;
-        
-        // Estimate FPS by seeking to multiple points
-        this.estimateFPS().then(fps => {
-          this.metadata!.fps = fps;
-          resolve(this.metadata!);
-        });
-      };
+        this.video.onerror = () => {
+          reject(new Error('Failed to load video'));
+        };
+      });
+    } catch (error) {
+      console.error('[VideoProcessor] Error loading video:', error);
+      throw error;
+    }
+  }
+
+  private async extractMediaInfo(file: File): Promise<{ fps: number | null; totalFrames: number | null }> {
+    let mediaInfo: any = null;
+    
+    try {
+      // Only run on client side
+      if (typeof window === 'undefined') {
+        console.log('[VideoProcessor] Skipping MediaInfo on server side');
+        return { fps: null, totalFrames: null };
+      }
       
-      this.video.onerror = () => {
-        reject(new Error('Failed to load video'));
-      };
-    });
+      // Dynamic import MediaInfo.js
+      const MediaInfoFactory = (await import('mediainfo.js')).default;
+      
+      // Initialize MediaInfo with locateFile to use the file from public folder
+      mediaInfo = await MediaInfoFactory({
+        format: 'object',
+        locateFile: () => '/MediaInfoModule.wasm'
+      });
+      
+      // Create read function for MediaInfo
+      const readChunk: ReadChunkFunc = (chunkSize, offset) => 
+        new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            if (event.target?.result) {
+              resolve(new Uint8Array(event.target.result as ArrayBuffer));
+            } else {
+              reject(new Error('Failed to read chunk'));
+            }
+          };
+          reader.onerror = reject;
+          reader.readAsArrayBuffer(file.slice(offset, offset + chunkSize));
+        });
+      
+      const result = await mediaInfo.analyzeData(() => file.size, readChunk);
+      
+      console.log('[VideoProcessor] MediaInfo full result:', JSON.stringify(result, null, 2));
+      console.log('[VideoProcessor] File analyzed:', file.name, 'Size:', file.size);
+      
+      // Find video track
+      const videoTrack = result.media?.track?.find((t: any) => t['@type'] === 'Video');
+      
+      if (videoTrack) {
+        const fps = parseFloat(videoTrack.FrameRate || '0');
+        const frameCount = parseInt(videoTrack.FrameCount || '0');
+        
+        console.log('[VideoProcessor] MediaInfo extracted:', {
+          fps: fps || null,
+          frameCount: frameCount || null,
+          duration: videoTrack.Duration,
+          codec: videoTrack.Format
+        });
+        
+        return {
+          fps: fps > 0 ? fps : null,
+          totalFrames: frameCount > 0 ? frameCount : null
+        };
+      }
+      
+      console.log('[VideoProcessor] No video track found in MediaInfo');
+      return { fps: null, totalFrames: null };
+      
+    } catch (error) {
+      console.error('[VideoProcessor] MediaInfo extraction failed:', error);
+      // Return null values to fallback to estimation
+      return { fps: null, totalFrames: null };
+    } finally {
+      // Always close MediaInfo instance when done
+      if (mediaInfo && typeof mediaInfo.close === 'function') {
+        mediaInfo.close();
+      }
+    }
   }
 
   private async estimateFPS(): Promise<number> {
@@ -65,7 +159,8 @@ export class VideoProcessor {
     if (videoTrack) {
       const settings = videoTrack.getSettings();
       if (settings.frameRate) {
-        return Math.round(settings.frameRate);
+        console.log(`[VideoProcessor] Got FPS from video track: ${settings.frameRate}`);
+        return settings.frameRate;
       }
     }
     
@@ -94,16 +189,23 @@ export class VideoProcessor {
         } else {
           this.video.pause();
           const realDuration = (performance.now() - startRealTime) / 1000;
-          const estimatedFps = Math.round(frameCount / realDuration);
+          const estimatedFps = frameCount / realDuration;
           
-          // Common frame rates
-          const commonFps = [24, 25, 30, 50, 60];
+          // Common frame rates - include more precise values
+          const commonFps = [23.976, 24, 25, 29.97, 30, 48, 50, 59.94, 60];
           const closest = commonFps.reduce((prev, curr) => 
             Math.abs(curr - estimatedFps) < Math.abs(prev - estimatedFps) ? curr : prev
           );
           
-          // console.log(`Detected FPS: ${estimatedFps}, using: ${closest}`);
-          resolve(closest);
+          console.log(`[VideoProcessor] Detected FPS: ${estimatedFps}, using: ${closest}`);
+          
+          // If the estimated FPS is very close to the raw value, use the raw value
+          if (Math.abs(estimatedFps - closest) > 2) {
+            console.log(`[VideoProcessor] Using raw FPS value: ${estimatedFps}`);
+            resolve(estimatedFps);
+          } else {
+            resolve(closest);
+          }
         }
       };
       
@@ -171,7 +273,8 @@ export class VideoProcessor {
     
     this.onProgress = onProgress;
     const frameInterval = 1 / this.metadata.fps;
-    const totalFrames = Math.floor(this.metadata.duration * this.metadata.fps);
+    // Use exact frame count from MediaInfo if available
+    const totalFrames = this.metadata.totalFrames || Math.floor(this.metadata.duration * this.metadata.fps + 0.5);
     
     for (let frameNumber = 0; frameNumber < totalFrames; frameNumber++) {
       const timestamp = frameNumber * frameInterval;

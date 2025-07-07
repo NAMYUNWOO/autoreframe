@@ -20,6 +20,7 @@ export class WebCodecsExporter {
   private lastFrameHash: string = '';
   private duplicateFrameCount: number = 0;
   private frameHashCache: Map<number, string> = new Map();
+  private loggedFrameCallback = false;
 
   async export(
     videoElement: HTMLVideoElement,
@@ -484,21 +485,10 @@ export class WebCodecsExporter {
       const duration = (frameSkip / metadata.fps) * 1000000; // Adjust duration for skipped frames
       actualFramesProcessed++;
       
-      // Mobile optimization: Skip duplicate frames
-      if (this.isMobile && frameNumber > 0) {
-        // Check if we should re-seek based on duplicate frames
-        if (this.duplicateFrameCount > 2) {
-          console.log(`[WebCodecs Export] Too many duplicates at frame ${frameNumber}, attempting re-seek`);
-          // Try seeking with a small offset
-          const offsetTime = (frameNumber / metadata.fps) + 0.001;
-          await this.seekToFrame(exportVideo, offsetTime);
-          this.duplicateFrameCount = 0;
-        } else {
-          await this.seekToFrame(exportVideo, frameNumber / metadata.fps);
-        }
-      } else {
-        await this.seekToFrame(exportVideo, frameNumber / metadata.fps);
-      }
+      // Calculate frame time with small offset for better accuracy
+      // Using frame center time (frameNumber + 0.5) for more accurate seeking
+      const frameTime = (frameNumber + 0.5) / metadata.fps;
+      await this.seekToFrame(exportVideo, frameTime);
       
       // Ensure video is ready to be drawn
       if (exportVideo.readyState < 2) {
@@ -552,13 +542,56 @@ export class WebCodecsExporter {
         ctx.fillRect(0, 0, outputWidth, outputHeight);
       }
       
-      // Mobile: Check for duplicate frames
-      if (this.isMobile && frameNumber > 0) {
-        const frameHash = this.calculateFrameHash(ctx, outputWidth, outputHeight);
+      // Check for duplicate frames (not just mobile)
+      if (frameNumber > 0) {
+        let frameHash = this.calculateFrameHash(ctx, outputWidth, outputHeight);
         
         if (frameHash === this.lastFrameHash) {
           this.duplicateFrameCount++;
-          console.log(`[WebCodecs Export] Duplicate frame detected at ${frameNumber} (count: ${this.duplicateFrameCount})`);
+          
+          // Only log if this is becoming a pattern
+          if (this.duplicateFrameCount > 1) {
+            console.log(`[WebCodecs Export] Duplicate frame detected at ${frameNumber} (count: ${this.duplicateFrameCount})`);
+          }
+          
+          // Try to re-seek with offset if we have too many duplicates
+          if (this.duplicateFrameCount <= 3) {
+            const offsetTime = frameTime + (this.duplicateFrameCount * 0.002);
+            await this.seekToFrame(exportVideo, offsetTime);
+            
+            // Re-draw the frame
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, outputWidth, outputHeight);
+            
+            if (transform) {
+              drawSuccess = await this.applyTransformSafe(
+                ctx,
+                exportVideo,
+                transform,
+                outputWidth,
+                outputHeight,
+                metadata,
+                reframingConfig,
+                initialTargetBox
+              );
+            } else {
+              try {
+                ctx.drawImage(exportVideo, 0, 0, outputWidth, outputHeight);
+                drawSuccess = true;
+              } catch (e) {
+                console.error('[WebCodecs Export] Error re-drawing video frame:', e);
+                drawSuccess = false;
+              }
+            }
+            
+            // Check hash again
+            const newFrameHash = this.calculateFrameHash(ctx, outputWidth, outputHeight);
+            if (newFrameHash !== frameHash) {
+              // Success! We got a different frame
+              this.duplicateFrameCount = 0;
+              frameHash = newFrameHash;
+            }
+          }
         } else {
           this.duplicateFrameCount = 0;
         }
@@ -750,16 +783,94 @@ export class WebCodecsExporter {
   }
 
   private async seekToFrame(videoElement: HTMLVideoElement, time: number): Promise<void> {
-    return new Promise((resolve, reject) => {
+    // Check if requestVideoFrameCallback is available
+    if ('requestVideoFrameCallback' in videoElement) {
+      // Log only once
+      if (!this.loggedFrameCallback) {
+        console.log('[WebCodecs Export] Using requestVideoFrameCallback for frame-accurate seeking');
+        this.loggedFrameCallback = true;
+      }
+      return this.seekWithFrameCallback(videoElement, time);
+    } else {
+      return this.seekWithFallback(videoElement, time);
+    }
+  }
+  
+  private async seekWithFrameCallback(videoElement: HTMLVideoElement, time: number): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
       let timeoutId: NodeJS.Timeout;
+      let callbackId: number;
+      let seekCompleted = false;
       
       const cleanup = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        if (callbackId !== undefined && 'cancelVideoFrameCallback' in videoElement) {
+          (videoElement as any).cancelVideoFrameCallback(callbackId);
+        }
         videoElement.removeEventListener('seeked', onSeeked);
         videoElement.removeEventListener('error', onError);
+      };
+      
+      const onSeeked = () => {
+        seekCompleted = true;
+        // Don't resolve yet - wait for frame callback
+      };
+      
+      const onError = (e: Event) => {
+        cleanup();
+        console.error('[WebCodecs Export] Video seek error:', e);
+        reject(new Error('Video seek error'));
+      };
+      
+      videoElement.addEventListener('seeked', onSeeked, { once: true });
+      videoElement.addEventListener('error', onError, { once: true });
+      
+      // Set up timeout
+      timeoutId = setTimeout(() => {
+        cleanup();
+        console.warn(`[WebCodecs Export] Video frame callback timeout at time ${time}`);
+        resolve();
+      }, 5000);
+      
+      // Request callback when the next frame is presented
+      callbackId = (videoElement as any).requestVideoFrameCallback((now: number, metadata: any) => {
+        cleanup();
+        
+        // Log frame metadata for debugging (only for first few frames)
+        if (metadata && this.processedFrames < 5) {
+          const presentedFrames = metadata.presentedFrames || 0;
+          
+          console.log(`[WebCodecs Export] Frame callback: time=${time.toFixed(3)}s, ` +
+                     `presentedFrames=${presentedFrames}`);
+        }
+        
+        // The frame is now ready and presented
+        resolve();
+      });
+      
+      // Set the video time
+      try {
+        videoElement.currentTime = time;
+      } catch (e) {
+        cleanup();
+        reject(new Error(`Failed to seek to time ${time}: ${e}`));
+      }
+    });
+  }
+  
+  private async seekWithFallback(videoElement: HTMLVideoElement, time: number): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      let timeoutId: NodeJS.Timeout;
+      let onSeeked: () => void;
+      let onError: (e: Event) => void;
+      
+      const cleanup = () => {
+        if (onSeeked) videoElement.removeEventListener('seeked', onSeeked);
+        if (onError) videoElement.removeEventListener('error', onError);
         if (timeoutId) clearTimeout(timeoutId);
       };
       
-      const onSeeked = async () => {
+      onSeeked = async () => {
         cleanup();
         
         // Mobile: Add extra stabilization time
@@ -778,7 +889,7 @@ export class WebCodecsExporter {
         resolve();
       };
       
-      const onError = (e: Event) => {
+      onError = (e: Event) => {
         cleanup();
         console.error('[WebCodecs Export] Video seek error:', e);
         reject(new Error('Video seek error'));

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Browser Feature Support Check</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .feature { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .supported { background: #d4edda; color: #155724; }
+        .not-supported { background: #f8d7da; color: #721c24; }
+        .partial { background: #fff3cd; color: #856404; }
+        code { background: #f0f0f0; padding: 2px 4px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <h1>Browser Feature Support Check</h1>
+    
+    <div id="results"></div>
+
+    <script>
+        const results = document.getElementById('results');
+        
+        function checkFeature(name, check, details = '') {
+            const div = document.createElement('div');
+            const supported = check();
+            div.className = `feature ${supported ? 'supported' : 'not-supported'}`;
+            div.innerHTML = `
+                <strong>${name}:</strong> ${supported ? '✅ Supported' : '❌ Not Supported'}
+                ${details ? `<br><small>${details}</small>` : ''}
+            `;
+            results.appendChild(div);
+            return supported;
+        }
+        
+        // Check WebCodecs API
+        checkFeature('WebCodecs API', () => 'VideoEncoder' in window && 'VideoDecoder' in window);
+        
+        // Check requestVideoFrameCallback
+        const hasRVFC = checkFeature('requestVideoFrameCallback', () => {
+            const video = document.createElement('video');
+            return 'requestVideoFrameCallback' in video;
+        }, 'Critical for frame-accurate video seeking');
+        
+        // Check cancelVideoFrameCallback
+        checkFeature('cancelVideoFrameCallback', () => {
+            const video = document.createElement('video');
+            return 'cancelVideoFrameCallback' in video;
+        });
+        
+        // Check OffscreenCanvas
+        checkFeature('OffscreenCanvas', () => typeof OffscreenCanvas !== 'undefined');
+        
+        // Check WebM Muxer requirements
+        checkFeature('WebM Support', () => {
+            const video = document.createElement('video');
+            return video.canPlayType('video/webm; codecs="vp8"') !== '';
+        });
+        
+        // Check MP4 Support
+        checkFeature('MP4 Support', () => {
+            const video = document.createElement('video');
+            return video.canPlayType('video/mp4; codecs="avc1.42E01E"') !== '';
+        });
+        
+        // Check H.264 encoding support
+        VideoEncoder.isConfigSupported({
+            codec: 'avc1.42001E',
+            width: 1920,
+            height: 1080,
+            bitrate: 5000000,
+            framerate: 30
+        }).then(result => {
+            const div = document.createElement('div');
+            div.className = `feature ${result.supported ? 'supported' : 'not-supported'}`;
+            div.innerHTML = `<strong>H.264 Encoding:</strong> ${result.supported ? '✅ Supported' : '❌ Not Supported'}`;
+            results.appendChild(div);
+        });
+        
+        // Check VP9 encoding support
+        VideoEncoder.isConfigSupported({
+            codec: 'vp09.00.10.08',
+            width: 1920,
+            height: 1080,
+            bitrate: 5000000,
+            framerate: 30
+        }).then(result => {
+            const div = document.createElement('div');
+            div.className = `feature ${result.supported ? 'supported' : 'not-supported'}`;
+            div.innerHTML = `<strong>VP9 Encoding:</strong> ${result.supported ? '✅ Supported' : '❌ Not Supported'}`;
+            results.appendChild(div);
+        });
+        
+        // Add browser info
+        const browserInfo = document.createElement('div');
+        browserInfo.style.marginTop = '20px';
+        browserInfo.innerHTML = `
+            <h3>Browser Information</h3>
+            <p><strong>User Agent:</strong> ${navigator.userAgent}</p>
+            <p><strong>Platform:</strong> ${navigator.platform}</p>
+        `;
+        results.appendChild(browserInfo);
+        
+        // Add recommendations
+        const recommendations = document.createElement('div');
+        recommendations.style.marginTop = '20px';
+        recommendations.innerHTML = `
+            <h3>Recommendations</h3>
+            ${!hasRVFC ? `
+                <p class="feature not-supported">
+                    ⚠️ <strong>requestVideoFrameCallback is not supported!</strong><br>
+                    This may cause frame duplication or skipping during video export.<br>
+                    Consider using Chrome 83+ or Safari 15.4+ for best results.
+                </p>
+            ` : `
+                <p class="feature supported">
+                    ✅ <strong>requestVideoFrameCallback is supported!</strong><br>
+                    Frame-accurate video seeking should work correctly.
+                </p>
+            `}
+        `;
+        results.appendChild(recommendations);
+    </script>
+</body>
+</html>

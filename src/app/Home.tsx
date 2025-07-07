@@ -12,6 +12,7 @@ import { ExportPanel } from '@/components/ExportPanel';
 import { ProcessingStatus } from '@/components/ProcessingStatus';
 import { HeadSelector } from '@/components/HeadSelector';
 import { TrajectoryEditor } from '@/components/TrajectoryEditor';
+import { ServiceShowcase } from '@/components/ServiceShowcase';
 import { ExportOptions, BoundingBox, FrameTransform } from '@/types';
 
 export default function Home() {
@@ -376,6 +377,9 @@ export default function Home() {
                 </div>
               </div>
             )}
+            
+            {/* Service Showcase */}
+            <ServiceShowcase className="mt-16" />
           </div>
         )}
 

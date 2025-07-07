@@ -40,6 +40,7 @@ export default function Home() {
 
   const {
     isModelLoaded,
+    modelLoadingProgress,
     isProcessing: isDetecting,
     detections,
     trackedObjects,
@@ -367,13 +368,32 @@ export default function Home() {
             />
             
             {!isModelLoaded && (
-              <div className="mt-4 text-center">
-                <div className="inline-flex items-center space-x-2 text-yellow-400">
-                  <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  <span>Loading person detection model...</span>
+              <div className="mt-6">
+                <div className="bg-black/30 backdrop-blur-sm rounded-xl p-6 border border-white/10 max-w-md mx-auto">
+                  <div className="text-center mb-4">
+                    <div className="inline-flex items-center space-x-2 text-blue-400 mb-2">
+                      <svg className="animate-pulse h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                      </svg>
+                      <span className="font-semibold">AI 엔진 준비 중...</span>
+                    </div>
+                    <p className="text-sm text-gray-400">잠시만 기다려주세요!</p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="w-full bg-gray-700/50 rounded-full h-3 overflow-hidden">
+                      <div className="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-500 ease-out" 
+                           style={{ width: `${modelLoadingProgress}%` }}>
+                        <div className="h-full w-full opacity-30 bg-gradient-to-r from-transparent via-white to-transparent animate-pulse"></div>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <p className="text-xs text-gray-500">
+                        첫 방문 시 모델을 다운로드합니다 (약 50MB)
+                      </p>
+                      <span className="text-xs text-blue-400 font-mono">{modelLoadingProgress}%</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

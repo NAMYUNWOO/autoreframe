@@ -43,6 +43,7 @@ function getCurrentTracker(
 
 export function useObjectDetection() {
   const [isModelLoaded, setIsModelLoaded] = useState(false);
+  const [modelLoadingProgress, setModelLoadingProgress] = useState(0);
   const [detections, setDetections] = useState<Detection[]>([]);
   const [trackedObjects, setTrackedObjects] = useState<TrackedObject[]>([]);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
@@ -73,12 +74,19 @@ export function useObjectDetection() {
   useEffect(() => {
     const initDetector = async () => {
       try {
+        // Simulate progress stages
+        setModelLoadingProgress(10);
+        
         // Initializing PersonYOLODetector...
         detectorRef.current = new PersonYOLODetector();
+        setModelLoadingProgress(20);
+        
         await detectorRef.current.initialize();
+        setModelLoadingProgress(50);
         
         // Set initial confidence threshold to match UI default (30%)
         detectorRef.current.setConfidenceThreshold(0.3);
+        setModelLoadingProgress(60);
         
         // Initialize second detector for parallel processing
         if (enableParallel) {
@@ -86,6 +94,7 @@ export function useObjectDetection() {
           secondDetectorRef.current = new PersonYOLODetector();
           await secondDetectorRef.current.initialize();
           secondDetectorRef.current.setConfidenceThreshold(0.3);
+          setModelLoadingProgress(80);
         }
         
         // Initialize head detector if head detection is enabled
@@ -94,6 +103,10 @@ export function useObjectDetection() {
           await headDetectorRef.current.initialize();
           // Head detector initialized
         }
+        
+        setModelLoadingProgress(100);
+        // Small delay to show 100% before hiding
+        await new Promise(resolve => setTimeout(resolve, 300));
         
         setIsModelLoaded(true);
         // Model loaded successfully!
@@ -810,6 +823,7 @@ export function useObjectDetection() {
 
   return {
     isModelLoaded,
+    modelLoadingProgress,
     isProcessing,
     detections,
     trackedObjects,

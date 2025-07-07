@@ -30,6 +30,12 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/apple-icon.png',
+  },
   openGraph: {
     title: "AutoReframer - AI Video Reframing Tool",
     description: "Free AI-powered tool to automatically reframe videos for social media. Smart person tracking, multiple aspect ratios, no watermark.",

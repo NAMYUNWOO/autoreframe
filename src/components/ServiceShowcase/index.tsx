@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 interface ServiceShowcaseProps {
   className?: string;
@@ -8,9 +8,70 @@ interface ServiceShowcaseProps {
 
 export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
   const [isPlaying, setIsPlaying] = useState({ original: false, reframed: false });
+  const [isVisible, setIsVisible] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const originalVideoRef = useRef<HTMLVideoElement>(null);
+  const reframedVideoRef = useRef<HTMLVideoElement>(null);
+
+  // Set up Intersection Observer
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting && !isVisible) {
+            setIsVisible(true);
+            // Start playing both videos when visible
+            if (originalVideoRef.current) {
+              originalVideoRef.current.play().catch(() => {
+                // Silently handle autoplay failures
+              });
+            }
+            if (reframedVideoRef.current) {
+              reframedVideoRef.current.play().catch(() => {
+                // Silently handle autoplay failures
+              });
+            }
+          }
+        });
+      },
+      {
+        threshold: 0.1 // Trigger when 10% visible
+      }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      if (containerRef.current) {
+        observer.unobserve(containerRef.current);
+      }
+    };
+  }, [isVisible]);
+
+  // Handle mobile touch to ensure playback
+  useEffect(() => {
+    const handleFirstTouch = () => {
+      if (originalVideoRef.current) {
+        originalVideoRef.current.play().catch(() => {});
+      }
+      if (reframedVideoRef.current) {
+        reframedVideoRef.current.play().catch(() => {});
+      }
+      // Remove listener after first touch
+      document.removeEventListener('touchstart', handleFirstTouch);
+    };
+
+    document.addEventListener('touchstart', handleFirstTouch);
+
+    return () => {
+      document.removeEventListener('touchstart', handleFirstTouch);
+    };
+  }, []);
 
   return (
-    <div className={`w-full ${className}`}>
+    <div ref={containerRef} className={`w-full ${className}`}>
       <div className="text-center mb-8">
         <h2 className="text-2xl font-bold text-white mb-3">
           See AutoReframer in Action
@@ -28,12 +89,13 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
           </h3>
           <div className="relative bg-black rounded-lg overflow-hidden shadow-2xl">
             <video
+              ref={originalVideoRef}
               src="/tracking.webm"
               className="w-full"
               loop
               muted
               playsInline
-              autoPlay
+              preload="auto"
               onMouseEnter={(e) => {
                 e.currentTarget.play();
                 setIsPlaying(prev => ({ ...prev, original: true }));
@@ -88,13 +150,14 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
 
                   {/* Video Content */}
                   <video
+                    ref={reframedVideoRef}
                     src="/reframed_tracking.webm"
                     className="w-full"
                     style={{ aspectRatio: '9/16' }}
                     loop
                     muted
                     playsInline
-                    autoPlay
+                    preload="auto"
                     onMouseEnter={(e) => {
                       e.currentTarget.play();
                       setIsPlaying(prev => ({ ...prev, reframed: true }));

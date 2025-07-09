@@ -5,6 +5,7 @@
 /reference_project
 /reference_project2
 /not_using
+/scripts
 /.pnp
 .pnp.*
 .yarn/*

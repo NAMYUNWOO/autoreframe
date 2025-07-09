@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     address: false,
     telephone: false,
   },
-  metadataBase: new URL("https://autoreframe.vercel.app"),
+  metadataBase: new URL("https://www.auto-reframe.com"),
   alternates: {
     canonical: "/",
   },
@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AutoReframer - AI Video Reframing Tool",
     description: "Free AI-powered tool to automatically reframe videos for social media. Smart person tracking, multiple aspect ratios, no watermark.",
-    url: "https://autoreframe.vercel.app",
+    url: "https://www.auto-reframe.com",
     siteName: "AutoReframer",
     images: [
       {
@@ -93,7 +93,7 @@ export default function RootLayout({
               "@type": "WebApplication",
               "name": "AutoReframer",
               "description": "AI-powered video reframing tool for social media",
-              "url": "https://autoreframe.vercel.app",
+              "url": "https://www.auto-reframe.com",
               "applicationCategory": "MultimediaApplication",
               "operatingSystem": "Web Browser",
               "offers": {
@@ -109,7 +109,7 @@ export default function RootLayout({
                 "Client-side processing",
                 "Export to MP4"
               ],
-              "screenshot": "https://autoreframe.vercel.app/og-image.png"
+              "screenshot": "https://www.auto-reframe.com/og-image.png"
             })
           }}
         />

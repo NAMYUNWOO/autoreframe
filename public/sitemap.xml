@@ -1,9 +1,115 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <!-- English (default) -->
   <url>
-    <loc>https://www.auto-reframe.com/</loc>
-    <lastmod>2025-01-09T00:00:00.000Z</lastmod>
+    <loc>https://www.auto-reframe.com/en</loc>
+    <lastmod>2025-01-19T00:00:00.000Z</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.auto-reframe.com/en"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://www.auto-reframe.com/ko"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://www.auto-reframe.com/ja"/>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://www.auto-reframe.com/zh"/>
+    <xhtml:link rel="alternate" hreflang="id" href="https://www.auto-reframe.com/id"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://www.auto-reframe.com/hi"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.auto-reframe.com/es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.auto-reframe.com/en"/>
+  </url>
+  
+  <!-- Korean -->
+  <url>
+    <loc>https://www.auto-reframe.com/ko</loc>
+    <lastmod>2025-01-19T00:00:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.auto-reframe.com/en"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://www.auto-reframe.com/ko"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://www.auto-reframe.com/ja"/>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://www.auto-reframe.com/zh"/>
+    <xhtml:link rel="alternate" hreflang="id" href="https://www.auto-reframe.com/id"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://www.auto-reframe.com/hi"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.auto-reframe.com/es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.auto-reframe.com/en"/>
+  </url>
+  
+  <!-- Japanese -->
+  <url>
+    <loc>https://www.auto-reframe.com/ja</loc>
+    <lastmod>2025-01-19T00:00:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.auto-reframe.com/en"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://www.auto-reframe.com/ko"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://www.auto-reframe.com/ja"/>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://www.auto-reframe.com/zh"/>
+    <xhtml:link rel="alternate" hreflang="id" href="https://www.auto-reframe.com/id"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://www.auto-reframe.com/hi"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.auto-reframe.com/es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.auto-reframe.com/en"/>
+  </url>
+  
+  <!-- Chinese -->
+  <url>
+    <loc>https://www.auto-reframe.com/zh</loc>
+    <lastmod>2025-01-19T00:00:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.auto-reframe.com/en"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://www.auto-reframe.com/ko"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://www.auto-reframe.com/ja"/>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://www.auto-reframe.com/zh"/>
+    <xhtml:link rel="alternate" hreflang="id" href="https://www.auto-reframe.com/id"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://www.auto-reframe.com/hi"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.auto-reframe.com/es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.auto-reframe.com/en"/>
+  </url>
+  
+  <!-- Indonesian -->
+  <url>
+    <loc>https://www.auto-reframe.com/id</loc>
+    <lastmod>2025-01-19T00:00:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.auto-reframe.com/en"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://www.auto-reframe.com/ko"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://www.auto-reframe.com/ja"/>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://www.auto-reframe.com/zh"/>
+    <xhtml:link rel="alternate" hreflang="id" href="https://www.auto-reframe.com/id"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://www.auto-reframe.com/hi"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.auto-reframe.com/es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.auto-reframe.com/en"/>
+  </url>
+  
+  <!-- Hindi -->
+  <url>
+    <loc>https://www.auto-reframe.com/hi</loc>
+    <lastmod>2025-01-19T00:00:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.auto-reframe.com/en"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://www.auto-reframe.com/ko"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://www.auto-reframe.com/ja"/>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://www.auto-reframe.com/zh"/>
+    <xhtml:link rel="alternate" hreflang="id" href="https://www.auto-reframe.com/id"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://www.auto-reframe.com/hi"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.auto-reframe.com/es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.auto-reframe.com/en"/>
+  </url>
+  
+  <!-- Spanish -->
+  <url>
+    <loc>https://www.auto-reframe.com/es</loc>
+    <lastmod>2025-01-19T00:00:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://www.auto-reframe.com/en"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://www.auto-reframe.com/ko"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://www.auto-reframe.com/ja"/>
+    <xhtml:link rel="alternate" hreflang="zh" href="https://www.auto-reframe.com/zh"/>
+    <xhtml:link rel="alternate" hreflang="id" href="https://www.auto-reframe.com/id"/>
+    <xhtml:link rel="alternate" hreflang="hi" href="https://www.auto-reframe.com/hi"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://www.auto-reframe.com/es"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://www.auto-reframe.com/en"/>
   </url>
 </urlset>

@@ -1,0 +1,25 @@
+{
+  "common": {
+    "title": "AutoReframer",
+    "description": "AI 기반 비디오 리프레이밍 도구",
+    "upload": "비디오 업로드",
+    "processing": "처리 중...",
+    "download": "다운로드",
+    "selectPerson": "인물 선택",
+    "reframe": "리프레임",
+    "export": "내보내기"
+  },
+  "seo": {
+    "title": "AutoReframer - AI 비디오 리프레이밍 도구 | 소셜미디어용 자동 크롭",
+    "description": "무료 온라인 AI 비디오 리프레이밍 도구. 인스타그램, 틱톡, 유튜브 쇼츠용 비디오 자동 크롭 및 크기 조정. 스마트 인물 추적, 화면 비율 변환 (16:9, 9:16, 1:1), 워터마크 없음.",
+    "keywords": "비디오 리프레이밍, AI 비디오 크롭, 자동 비디오 크롭, 인스타그램 비디오 크기 조정, 틱톡 비디오 리사이저, 유튜브 쇼츠 변환기, 화면 비율 변환기, 인물 추적, 비디오 편집 도구, 무료 비디오 편집기"
+  },
+  "features": {
+    "aiPowered": "AI 기반 감지",
+    "personTracking": "스마트 인물 추적",
+    "multipleAspectRatios": "다양한 화면 비율 (16:9, 9:16, 1:1, 4:5)",
+    "noWatermark": "워터마크 없음",
+    "clientSideProcessing": "클라이언트 측 처리",
+    "exportToMp4": "MP4로 내보내기"
+  }
+}

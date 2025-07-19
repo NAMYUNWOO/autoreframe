@@ -1,0 +1,25 @@
+{
+  "common": {
+    "title": "AutoReframer",
+    "description": "AI搭載動画リフレーミングツール",
+    "upload": "動画をアップロード",
+    "processing": "処理中...",
+    "download": "ダウンロード",
+    "selectPerson": "人物を選択",
+    "reframe": "リフレーム",
+    "export": "エクスポート"
+  },
+  "seo": {
+    "title": "AutoReframer - AI動画リフレーミングツール | ソーシャルメディア用自動クロップ",
+    "description": "無料オンラインAI動画リフレーミングツール。Instagram、TikTok、YouTubeショート用に動画を自動クロップ・リサイズ。スマート人物追跡、アスペクト比変換（16:9、9:16、1:1）、透かしなし。",
+    "keywords": "動画リフレーミング, AI動画クロップ, 自動動画クロップ, Instagram動画リサイズ, TikTok動画リサイザー, YouTubeショート変換, アスペクト比変換, 人物追跡, 動画編集ツール, 無料動画エディター"
+  },
+  "features": {
+    "aiPowered": "AI搭載検出",
+    "personTracking": "スマート人物追跡",
+    "multipleAspectRatios": "複数のアスペクト比（16:9、9:16、1:1、4:5）",
+    "noWatermark": "透かしなし",
+    "clientSideProcessing": "クライアント側処理",
+    "exportToMp4": "MP4にエクスポート"
+  }
+}

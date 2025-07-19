@@ -1,0 +1,25 @@
+{
+  "common": {
+    "title": "AutoReframer",
+    "description": "Herramienta de reencuadre de video con IA",
+    "upload": "Subir Video",
+    "processing": "Procesando...",
+    "download": "Descargar",
+    "selectPerson": "Seleccionar Persona",
+    "reframe": "Reencuadrar",
+    "export": "Exportar"
+  },
+  "seo": {
+    "title": "AutoReframer - Herramienta de Reencuadre de Video con IA | Recorte Automático para Redes Sociales",
+    "description": "Herramienta gratuita de reencuadre de video con IA en línea. Recorta y redimensiona videos automáticamente para Instagram, TikTok, YouTube Shorts. Seguimiento inteligente de personas, conversión de relación de aspecto (16:9, 9:16, 1:1), sin marca de agua.",
+    "keywords": "reencuadre de video, recorte de video con IA, recorte automático de video, redimensionar video para Instagram, redimensionador de video TikTok, convertidor YouTube Shorts, convertidor de relación de aspecto, seguimiento de personas, herramienta de edición de video, editor de video gratuito"
+  },
+  "features": {
+    "aiPowered": "Detección con IA",
+    "personTracking": "Seguimiento inteligente de personas",
+    "multipleAspectRatios": "Múltiples relaciones de aspecto (16:9, 9:16, 1:1, 4:5)",
+    "noWatermark": "Sin marca de agua",
+    "clientSideProcessing": "Procesamiento del lado del cliente",
+    "exportToMp4": "Exportar a MP4"
+  }
+}

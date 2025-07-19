@@ -1,0 +1,25 @@
+{
+  "common": {
+    "title": "AutoReframer",
+    "description": "AI驱动的视频重构工具",
+    "upload": "上传视频",
+    "processing": "处理中...",
+    "download": "下载",
+    "selectPerson": "选择人物",
+    "reframe": "重构",
+    "export": "导出"
+  },
+  "seo": {
+    "title": "AutoReframer - AI视频重构工具 | 社交媒体自动裁剪",
+    "description": "免费在线AI视频重构工具。自动裁剪和调整视频大小，适用于Instagram、TikTok、YouTube Shorts。智能人物追踪，宽高比转换（16:9、9:16、1:1），无水印。",
+    "keywords": "视频重构, AI视频裁剪, 自动视频裁剪, Instagram视频调整大小, TikTok视频调整器, YouTube Shorts转换器, 宽高比转换器, 人物追踪, 视频编辑工具, 免费视频编辑器"
+  },
+  "features": {
+    "aiPowered": "AI驱动检测",
+    "personTracking": "智能人物追踪",
+    "multipleAspectRatios": "多种宽高比（16:9、9:16、1:1、4:5）",
+    "noWatermark": "无水印",
+    "clientSideProcessing": "客户端处理",
+    "exportToMp4": "导出为MP4"
+  }
+}

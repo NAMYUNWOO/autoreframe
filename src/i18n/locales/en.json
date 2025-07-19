@@ -1,0 +1,25 @@
+{
+  "common": {
+    "title": "AutoReframer",
+    "description": "AI-powered video reframing tool",
+    "upload": "Upload Video",
+    "processing": "Processing...",
+    "download": "Download",
+    "selectPerson": "Select Person",
+    "reframe": "Reframe",
+    "export": "Export"
+  },
+  "seo": {
+    "title": "AutoReframer - AI Video Reframing Tool | Auto Crop Videos for Social Media",
+    "description": "Free online AI-powered video reframing tool. Automatically crop and resize videos for Instagram, TikTok, YouTube Shorts. Smart person tracking, aspect ratio conversion (16:9, 9:16, 1:1), no watermark.",
+    "keywords": "video reframing, AI video crop, auto crop video, resize video for Instagram, TikTok video resizer, YouTube Shorts converter, aspect ratio converter, person tracking, video editing tool, free video editor"
+  },
+  "features": {
+    "aiPowered": "AI-powered detection",
+    "personTracking": "Smart person tracking",
+    "multipleAspectRatios": "Multiple aspect ratios (16:9, 9:16, 1:1, 4:5)",
+    "noWatermark": "No watermark",
+    "clientSideProcessing": "Client-side processing",
+    "exportToMp4": "Export to MP4"
+  }
+}

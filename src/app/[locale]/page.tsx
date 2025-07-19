@@ -28,10 +28,7 @@ export default function Page({ params }: PageProps) {
   
   return (
     <NoSSRWrapper>
-      <div className="container mx-auto px-4 py-8">
-        <BrowserOptimizationNotice dictionary={dictionary.browserNotice} />
-        <Home dictionary={dictionary} />
-      </div>
+      <Home dictionary={dictionary} browserNotice={dictionary.browserNotice} />
     </NoSSRWrapper>
   );
 }

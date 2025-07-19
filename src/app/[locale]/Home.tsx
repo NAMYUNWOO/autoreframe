@@ -19,9 +19,10 @@ import { Dictionary } from '@/i18n/dictionaries';
 
 interface HomeProps {
   dictionary: Dictionary;
+  browserNotice: Dictionary['browserNotice'];
 }
 
-export default function Home({ dictionary }: HomeProps) {
+export default function Home({ dictionary, browserNotice }: HomeProps) {
   const [currentStep, setCurrentStep] = useState<'upload' | 'process' | 'export'>('upload');
   const [showDetections, setShowDetections] = useState(true);
   const [showReframing, setShowReframing] = useState(true);
@@ -356,9 +357,10 @@ export default function Home({ dictionary }: HomeProps) {
       )}
 
       {/* Main Content */}
-      <main>
+      <main className="container mx-auto px-4 py-8">
         {currentStep === 'upload' && (
           <div className="max-w-2xl mx-auto">
+            <BrowserOptimizationNotice dictionary={browserNotice} />
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-white mb-4">
                 {dictionary.home.title}

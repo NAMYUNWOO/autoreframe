@@ -21,5 +21,10 @@
     "noWatermark": "无水印",
     "clientSideProcessing": "客户端处理",
     "exportToMp4": "导出为MP4"
+  },
+  "browserNotice": {
+    "title": "浏览器优化通知",
+    "description": "此应用程序在桌面版Chrome浏览器中能发挥最佳性能。",
+    "recommendation": "为获得最佳视频处理体验，我们建议在桌面设备上使用Google Chrome。"
   }
 }

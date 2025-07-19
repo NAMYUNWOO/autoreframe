@@ -21,5 +21,10 @@
     "noWatermark": "透かしなし",
     "clientSideProcessing": "クライアント側処理",
     "exportToMp4": "MP4にエクスポート"
+  },
+  "browserNotice": {
+    "title": "ブラウザ最適化のお知らせ",
+    "description": "このアプリケーションはデスクトップ版Chromeブラウザで最高のパフォーマンスを発揮します。",
+    "recommendation": "最適な動画処理体験のため、デスクトップでGoogle Chromeの使用をお勧めします。"
   }
 }

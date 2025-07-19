@@ -21,5 +21,10 @@
     "noWatermark": "Sin marca de agua",
     "clientSideProcessing": "Procesamiento del lado del cliente",
     "exportToMp4": "Exportar a MP4"
+  },
+  "browserNotice": {
+    "title": "Aviso de Optimización del Navegador",
+    "description": "Esta aplicación está optimizada para el navegador Chrome de escritorio para obtener el mejor rendimiento.",
+    "recommendation": "Para una experiencia óptima de procesamiento de video, recomendamos usar Google Chrome en escritorio."
   }
 }

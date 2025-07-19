@@ -24,6 +24,11 @@ export interface Dictionary {
     clientSideProcessing: string;
     exportToMp4: string;
   };
+  browserNotice: {
+    title: string;
+    description: string;
+    recommendation: string;
+  };
 }
 
 const dictionaries: Record<Locale, () => Promise<Dictionary>> = {

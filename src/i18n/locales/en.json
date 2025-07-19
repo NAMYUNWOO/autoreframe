@@ -21,5 +21,10 @@
     "noWatermark": "No watermark",
     "clientSideProcessing": "Client-side processing",
     "exportToMp4": "Export to MP4"
+  },
+  "browserNotice": {
+    "title": "Browser Optimization Notice",
+    "description": "This application is optimized for desktop Chrome browser for the best performance.",
+    "recommendation": "For optimal video processing experience, we recommend using Google Chrome on desktop."
   }
 }

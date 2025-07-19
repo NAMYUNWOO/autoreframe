@@ -13,6 +13,7 @@ import { ProcessingStatus } from '@/components/ProcessingStatus';
 import { HeadSelector } from '@/components/HeadSelector';
 import { TrajectoryEditor } from '@/components/TrajectoryEditor';
 import { ServiceShowcase } from '@/components/ServiceShowcase';
+import { BrowserOptimizationNotice } from '@/components/BrowserOptimizationNotice';
 import { ExportOptions, BoundingBox, FrameTransform } from '@/types';
 
 export default function Home() {
@@ -350,7 +351,7 @@ export default function Home() {
       )}
 
       {/* Main Content */}
-      <main className="container mx-auto px-4 py-8">
+      <main>
         {currentStep === 'upload' && (
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-8">

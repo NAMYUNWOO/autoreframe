@@ -21,5 +21,10 @@
     "noWatermark": "Tanpa watermark",
     "clientSideProcessing": "Pemrosesan sisi klien",
     "exportToMp4": "Ekspor ke MP4"
+  },
+  "browserNotice": {
+    "title": "Pemberitahuan Optimasi Browser",
+    "description": "Aplikasi ini dioptimalkan untuk browser Chrome desktop untuk kinerja terbaik.",
+    "recommendation": "Untuk pengalaman pemrosesan video yang optimal, kami merekomendasikan menggunakan Google Chrome di desktop."
   }
 }

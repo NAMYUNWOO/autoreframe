@@ -9,6 +9,13 @@
     "reframe": "重构",
     "export": "导出"
   },
+  "home": {
+    "title": "AI视频重构 - 社交媒体自动裁剪",
+    "subtitle": "免费在线工具，自动检测和跟踪人物。将横屏视频转换为Instagram Reels、TikTok和YouTube Shorts的竖屏视频。",
+    "aiEngineLoading": "AI引擎加载中...",
+    "pleaseWait": "请稍等！",
+    "firstVisitDownload": "首次访问需要下载模型（约50MB）"
+  },
   "seo": {
     "title": "AutoReframer - AI视频重构工具 | 社交媒体自动裁剪",
     "description": "免费在线AI视频重构工具。自动裁剪和调整视频大小，适用于Instagram、TikTok、YouTube Shorts。智能人物追踪，宽高比转换（16:9、9:16、1:1），无水印。",

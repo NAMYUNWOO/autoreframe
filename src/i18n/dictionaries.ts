@@ -11,6 +11,13 @@ export interface Dictionary {
     reframe: string;
     export: string;
   };
+  home: {
+    title: string;
+    subtitle: string;
+    aiEngineLoading: string;
+    pleaseWait: string;
+    firstVisitDownload: string;
+  };
   seo: {
     title: string;
     description: string;

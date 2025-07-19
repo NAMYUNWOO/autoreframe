@@ -9,6 +9,13 @@
     "reframe": "Reencuadrar",
     "export": "Exportar"
   },
+  "home": {
+    "title": "Reencuadre de Video con IA - Recorte Automático para Redes Sociales",
+    "subtitle": "Herramienta en línea gratuita para detectar y rastrear personas automáticamente. Convierte videos horizontales a verticales para Instagram Reels, TikTok y YouTube Shorts.",
+    "aiEngineLoading": "Cargando motor de IA...",
+    "pleaseWait": "¡Por favor espera!",
+    "firstVisitDownload": "La primera visita descarga el modelo (aproximadamente 50MB)"
+  },
   "seo": {
     "title": "AutoReframer - Herramienta de Reencuadre de Video con IA | Recorte Automático para Redes Sociales",
     "description": "Herramienta gratuita de reencuadre de video con IA en línea. Recorta y redimensiona videos automáticamente para Instagram, TikTok, YouTube Shorts. Seguimiento inteligente de personas, conversión de relación de aspecto (16:9, 9:16, 1:1), sin marca de agua.",

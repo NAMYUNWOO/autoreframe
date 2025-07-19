@@ -9,6 +9,13 @@
     "reframe": "Reframe",
     "export": "Ekspor"
   },
+  "home": {
+    "title": "AI Video Reframing - Crop Video Otomatis untuk Media Sosial",
+    "subtitle": "Alat online gratis untuk mendeteksi dan melacak orang secara otomatis. Konversi video landscape ke portrait untuk Instagram Reels, TikTok, dan YouTube Shorts.",
+    "aiEngineLoading": "Memuat Mesin AI...",
+    "pleaseWait": "Harap tunggu!",
+    "firstVisitDownload": "Kunjungan pertama mengunduh model (sekitar 50MB)"
+  },
   "seo": {
     "title": "AutoReframer - Alat Reframing Video AI | Crop Video Otomatis untuk Media Sosial",
     "description": "Alat reframing video AI online gratis. Crop dan ubah ukuran video otomatis untuk Instagram, TikTok, YouTube Shorts. Pelacakan orang pintar, konversi rasio aspek (16:9, 9:16, 1:1), tanpa watermark.",

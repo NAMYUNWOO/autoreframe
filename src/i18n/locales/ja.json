@@ -9,6 +9,13 @@
     "reframe": "リフレーム",
     "export": "エクスポート"
   },
+  "home": {
+    "title": "AI動画リフレーミング - ソーシャルメディア用自動クロップ",
+    "subtitle": "人物を自動的に検出・追跡する無料オンラインツール。横向き動画をInstagramリール、TikTok、YouTubeショート用の縦向き動画に変換します。",
+    "aiEngineLoading": "AIエンジンを読み込み中...",
+    "pleaseWait": "しばらくお待ちください！",
+    "firstVisitDownload": "初回訪問時にモデルをダウンロードします（約50MB）"
+  },
   "seo": {
     "title": "AutoReframer - AI動画リフレーミングツール | ソーシャルメディア用自動クロップ",
     "description": "無料オンラインAI動画リフレーミングツール。Instagram、TikTok、YouTubeショート用に動画を自動クロップ・リサイズ。スマート人物追跡、アスペクト比変換（16:9、9:16、1:1）、透かしなし。",

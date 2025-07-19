@@ -15,8 +15,13 @@ import { TrajectoryEditor } from '@/components/TrajectoryEditor';
 import { ServiceShowcase } from '@/components/ServiceShowcase';
 import { BrowserOptimizationNotice } from '@/components/BrowserOptimizationNotice';
 import { ExportOptions, BoundingBox, FrameTransform } from '@/types';
+import { Dictionary } from '@/i18n/dictionaries';
 
-export default function Home() {
+interface HomeProps {
+  dictionary: Dictionary;
+}
+
+export default function Home({ dictionary }: HomeProps) {
   const [currentStep, setCurrentStep] = useState<'upload' | 'process' | 'export'>('upload');
   const [showDetections, setShowDetections] = useState(true);
   const [showReframing, setShowReframing] = useState(true);
@@ -356,10 +361,10 @@ export default function Home() {
           <div className="max-w-2xl mx-auto">
             <div className="text-center mb-8">
               <h1 className="text-3xl font-bold text-white mb-4">
-                AI Video Reframing - Auto Crop Videos for Social Media
+                {dictionary.home.title}
               </h1>
               <p className="text-gray-400">
-                Free online tool to automatically detect and track persons. Convert landscape videos to portrait for Instagram Reels, TikTok, and YouTube Shorts.
+                {dictionary.home.subtitle}
               </p>
             </div>
             
@@ -376,9 +381,9 @@ export default function Home() {
                       <svg className="animate-pulse h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                       </svg>
-                      <span className="font-semibold">AI 엔진 준비 중...</span>
+                      <span className="font-semibold">{dictionary.home.aiEngineLoading}</span>
                     </div>
-                    <p className="text-sm text-gray-400">잠시만 기다려주세요!</p>
+                    <p className="text-sm text-gray-400">{dictionary.home.pleaseWait}</p>
                   </div>
                   
                   <div className="space-y-2">
@@ -390,7 +395,7 @@ export default function Home() {
                     </div>
                     <div className="flex justify-between items-center">
                       <p className="text-xs text-gray-500">
-                        첫 방문 시 모델을 다운로드합니다 (약 50MB)
+                        {dictionary.home.firstVisitDownload}
                       </p>
                       <span className="text-xs text-blue-400 font-mono">{modelLoadingProgress}%</span>
                     </div>

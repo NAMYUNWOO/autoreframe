@@ -9,6 +9,13 @@
     "reframe": "Reframe",
     "export": "Export"
   },
+  "home": {
+    "title": "AI Video Reframing - Auto Crop Videos for Social Media",
+    "subtitle": "Free online tool to automatically detect and track persons. Convert landscape videos to portrait for Instagram Reels, TikTok, and YouTube Shorts.",
+    "aiEngineLoading": "Loading AI Engine...",
+    "pleaseWait": "Please wait!",
+    "firstVisitDownload": "First visit downloads the model (about 50MB)"
+  },
   "seo": {
     "title": "AutoReframer - AI Video Reframing Tool | Auto Crop Videos for Social Media",
     "description": "Free online AI-powered video reframing tool. Automatically crop and resize videos for Instagram, TikTok, YouTube Shorts. Smart person tracking, aspect ratio conversion (16:9, 9:16, 1:1), no watermark.",

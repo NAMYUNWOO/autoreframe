@@ -12,21 +12,25 @@ interface PageProps {
 }
 
 export default function Page({ params }: PageProps) {
-  const [browserNoticeDict, setBrowserNoticeDict] = useState<any>(null);
+  const [dictionary, setDictionary] = useState<any>(null);
   
   useEffect(() => {
     params.then(({ locale }) => {
       getDictionary(locale).then(dict => {
-        setBrowserNoticeDict(dict.browserNotice);
+        setDictionary(dict);
       });
     });
   }, [params]);
   
+  if (!dictionary) {
+    return null; // Or a loading state
+  }
+  
   return (
     <NoSSRWrapper>
       <div className="container mx-auto px-4 py-8">
-        {browserNoticeDict && <BrowserOptimizationNotice dictionary={browserNoticeDict} />}
-        <Home />
+        <BrowserOptimizationNotice dictionary={dictionary.browserNotice} />
+        <Home dictionary={dictionary} />
       </div>
     </NoSSRWrapper>
   );

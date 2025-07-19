@@ -8,7 +8,7 @@ AutoReframer is a powerful browser-based video reframing application that automa
 - **Next.js 15** - React framework with App Router for optimal performance
 - **React 18** - UI library with hooks and functional components
 - **TypeScript** - Type-safe development with strict mode enabled
-
+- **multi lang** - global
 ### AI & Computer Vision
 - **TensorFlow.js** - Browser-based machine learning for object detection
 - **YOLOv12n** - State-of-the-art object detection model (80 COCO classes)

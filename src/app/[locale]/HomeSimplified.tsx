@@ -9,6 +9,7 @@ import PersonGallery from '@/components/PersonGallery';
 import ResultPlayer from '@/components/ResultPlayer';
 import ActionButtons from '@/components/ActionButtons';
 import { BrowserOptimizationNotice } from '@/components/BrowserOptimizationNotice';
+import { ServiceShowcase } from '@/components/ServiceShowcase';
 import { Detection } from '@/types';
 import { Dictionary } from '@/i18n/dictionaries';
 
@@ -365,6 +366,8 @@ export default function HomeSimplified({ dictionary, browserNotice }: HomeSimpli
                 </div>
               </div>
             )}
+
+            <ServiceShowcase className="mt-16" />
           </div>
         )}
 

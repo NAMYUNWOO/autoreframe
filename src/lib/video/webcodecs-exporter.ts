@@ -960,35 +960,22 @@ export class WebCodecsExporter {
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, outputWidth, outputHeight);
 
-    let cropW: number, cropH: number;
+    // Always use transform.scale for crop dimensions - this ensures the crop follows the person
+    // The scale was calculated by the reframing engine based on target position and size
+    const outputAspectRatio = outputWidth / outputHeight;
 
-    if (initialTargetBox && reframingConfig) {
-      const outputAspectRatio = outputWidth / outputHeight;
-      try {
-        const calculatedDimensions = ReframeSizeCalculatorV2.calculateOptimalReframeSize(
-          initialTargetBox,
-          metadata.width,
-          metadata.height,
-          outputAspectRatio,
-          reframingConfig
-        );
-        cropW = calculatedDimensions.width;
-        cropH = calculatedDimensions.height;
-      } catch (e) {
-        console.error('[WebCodecs Export] Failed to calculate reframe size:', e);
-        console.error('[WebCodecs Export] Params:', {
-          initialTargetBox,
-          videoSize: { width: metadata.width, height: metadata.height },
-          outputAspectRatio,
-          reframingConfig
-        });
-        // Fallback to transform-based cropping
-        cropW = metadata.width / transform.scale;
-        cropH = metadata.height / transform.scale;
-      }
-    } else {
-      cropW = metadata.width / transform.scale;
-      cropH = metadata.height / transform.scale;
+    // Calculate crop dimensions from transform scale
+    let cropW = metadata.width / transform.scale;
+    let cropH = cropW / outputAspectRatio;
+
+    // Ensure crop fits within frame bounds
+    if (cropH > metadata.height) {
+      cropH = metadata.height;
+      cropW = cropH * outputAspectRatio;
+    }
+    if (cropW > metadata.width) {
+      cropW = metadata.width;
+      cropH = cropW / outputAspectRatio;
     }
 
     const sx = Math.max(0, Math.min(metadata.width - cropW, transform.x - cropW / 2));

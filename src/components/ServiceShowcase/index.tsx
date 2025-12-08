@@ -7,36 +7,27 @@ interface ServiceShowcaseProps {
 }
 
 export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
-  const [isPlaying, setIsPlaying] = useState({ original: false, reframed: false });
   const [isVisible, setIsVisible] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const originalVideoRef = useRef<HTMLVideoElement>(null);
   const reframedVideoRef = useRef<HTMLVideoElement>(null);
 
-  // Set up Intersection Observer
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting && !isVisible) {
             setIsVisible(true);
-            // Start playing both videos when visible
             if (originalVideoRef.current) {
-              originalVideoRef.current.play().catch(() => {
-                // Silently handle autoplay failures
-              });
+              originalVideoRef.current.play().catch(() => {});
             }
             if (reframedVideoRef.current) {
-              reframedVideoRef.current.play().catch(() => {
-                // Silently handle autoplay failures
-              });
+              reframedVideoRef.current.play().catch(() => {});
             }
           }
         });
       },
-      {
-        threshold: 0.1 // Trigger when 10% visible
-      }
+      { threshold: 0.1 }
     );
 
     if (containerRef.current) {
@@ -50,7 +41,6 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
     };
   }, [isVisible]);
 
-  // Handle mobile touch to ensure playback
   useEffect(() => {
     const handleFirstTouch = () => {
       if (originalVideoRef.current) {
@@ -59,7 +49,6 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
       if (reframedVideoRef.current) {
         reframedVideoRef.current.play().catch(() => {});
       }
-      // Remove listener after first touch
       document.removeEventListener('touchstart', handleFirstTouch);
     };
 
@@ -82,7 +71,6 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-        {/* Original Video */}
         <div className="space-y-3">
           <h3 className="text-center text-white font-semibold">
             Original Video with Person Tracking
@@ -96,14 +84,8 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
               muted
               playsInline
               preload="auto"
-              onMouseEnter={(e) => {
-                e.currentTarget.play();
-                setIsPlaying(prev => ({ ...prev, original: true }));
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.pause();
-                setIsPlaying(prev => ({ ...prev, original: false }));
-              }}
+              onMouseEnter={(e) => e.currentTarget.play()}
+              onMouseLeave={(e) => e.currentTarget.pause()}
             />
             <div className="absolute bottom-4 left-4 bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded-full">
               <span className="text-xs text-white flex items-center gap-2">
@@ -117,19 +99,14 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
           </p>
         </div>
 
-        {/* Reframed Video with Social Media Frame */}
         <div className="space-y-3">
           <h3 className="text-center text-white font-semibold">
             Reframed for Instagram/TikTok
           </h3>
           <div className="relative">
-            {/* Phone Frame */}
             <div className="relative mx-auto" style={{ maxWidth: '320px' }}>
-              {/* Phone Shell */}
               <div className="relative bg-black rounded-[2.5rem] p-2 shadow-2xl">
-                {/* Screen */}
                 <div className="relative bg-black rounded-[2rem] overflow-hidden">
-                  {/* Status Bar */}
                   <div className="absolute top-0 left-0 right-0 z-10 bg-gradient-to-b from-black/50 to-transparent px-6 py-2">
                     <div className="flex justify-between items-center text-white text-xs">
                       <span>9:41</span>
@@ -148,7 +125,6 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
                     </div>
                   </div>
 
-                  {/* Video Content */}
                   <video
                     ref={reframedVideoRef}
                     src="/reframed_tracking.webm"
@@ -158,17 +134,10 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
                     muted
                     playsInline
                     preload="auto"
-                    onMouseEnter={(e) => {
-                      e.currentTarget.play();
-                      setIsPlaying(prev => ({ ...prev, reframed: true }));
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.pause();
-                      setIsPlaying(prev => ({ ...prev, reframed: false }));
-                    }}
+                    onMouseEnter={(e) => e.currentTarget.play()}
+                    onMouseLeave={(e) => e.currentTarget.pause()}
                   />
 
-                  {/* Bottom Navigation */}
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4">
                     <div className="flex justify-around items-center text-white">
                       <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
@@ -192,7 +161,6 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
                     </div>
                   </div>
 
-                  {/* Social Media Overlay */}
                   <div className="absolute right-3 bottom-20 flex flex-col gap-4 items-center">
                     <div className="text-center">
                       <div className="w-10 h-10 bg-white rounded-full mb-1"></div>
@@ -215,8 +183,7 @@ export function ServiceShowcase({ className = '' }: ServiceShowcaseProps) {
                   </div>
                 </div>
               </div>
-              
-              {/* Home Indicator */}
+
               <div className="mt-2 mx-auto w-32 h-1 bg-white/30 rounded-full"></div>
             </div>
           </div>

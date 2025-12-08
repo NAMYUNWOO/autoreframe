@@ -6,6 +6,7 @@ import { HeadDetector } from '@/lib/detection/head-detector';
 import { Detection, BoundingBox, TrackedObject } from '@/types';
 import { detectionConfig } from '@/config/detection';
 import { getAdaptiveConfig } from '@/config/detection-adaptive';
+import { DeviceDetector } from '@/lib/utils/device';
 
 // Helper function to calculate IoU between two bounding boxes
 function calculateIoU(box1: BoundingBox, box2: BoundingBox): number {
@@ -60,15 +61,11 @@ export function useObjectDetection() {
   const headDetectorRef = useRef<HeadDetector | null>(null);
   
   // Check if mobile device
-  const isMobile = useCallback(() => {
-    if (typeof window === 'undefined') return false;
-    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
-    return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent.toLowerCase());
-  }, []);
-  
+  const device = DeviceDetector.getInstance();
+
   // For parallel processing - disable on mobile
   const secondDetectorRef = useRef<PersonYOLODetector | null>(null);
-  const enableParallel = !isMobile();
+  const enableParallel = !device.isMobile;
 
   // Initialize detector
   useEffect(() => {
@@ -218,7 +215,7 @@ export function useObjectDetection() {
     let detectionFrameCount = 0; // Count only frames where detection runs
     
     // Check if mobile for progressive processing
-    const isMobileDevice = isMobile();
+    const isMobileDevice = device.isMobile;
     
     try {
       if (isMobileDevice) {
@@ -351,7 +348,7 @@ export function useObjectDetection() {
         });
         
         // Second pass: process detections with parallel YOLO inference but sequential ByteTracker
-        const useParallel = enableParallel && secondDetectorRef.current && detectionTasks.length > 10 && !isMobile();
+        const useParallel = enableParallel && secondDetectorRef.current && detectionTasks.length > 10 && !device.isMobile;
         // Processing detection tasks
       
       if (useParallel) {
@@ -462,7 +459,7 @@ export function useObjectDetection() {
         }
       } else {
         // Sequential processing (fallback for small number of detection tasks or mobile)
-        const isMobileDevice = isMobile();
+        const isMobileDevice = device.isMobile;
         let processedCount = 0;
         
         for (const task of detectionTasks) {
@@ -708,7 +705,7 @@ export function useObjectDetection() {
     } finally {
       setIsProcessing(false);
     }
-  }, [isModelLoaded, targetDetection, useHeadDetection, useByteTrack, enableParallel, isMobile]);
+  }, [isModelLoaded, targetDetection, useHeadDetection, useByteTrack, enableParallel, device.isMobile]);
 
   const selectTrack = useCallback((trackId: string | null) => {
     setSelectedTrackId(trackId);

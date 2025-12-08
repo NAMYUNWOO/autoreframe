@@ -1,6 +1,7 @@
 import * as tf from '@tensorflow/tfjs';
 import { BoundingBox } from '@/types';
 import { detectionConfig } from '@/config/detection';
+import { DeviceDetector } from '../utils/device';
 
 /**
  * YOLOv12n Person Detector
@@ -59,10 +60,10 @@ export class PersonYOLODetector {
     
     try {
       // Set up TensorFlow.js backend for mobile compatibility
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      // Initializing on mobile: isMobile
-      
-      if (isMobile) {
+      const device = DeviceDetector.getInstance();
+      // Initializing on mobile: device.isMobile
+
+      if (device.isMobile) {
         // Use same WebGL configuration as PC for consistency
         try {
           await tf.setBackend('webgl');

@@ -33,5 +33,36 @@
     "title": "Pemberitahuan Optimasi Browser",
     "description": "Aplikasi ini dioptimalkan untuk browser Chrome desktop untuk kinerja terbaik.",
     "recommendation": "Untuk pengalaman pemrosesan video yang optimal, kami merekomendasikan menggunakan Google Chrome di desktop."
+  },
+  "personGallery": {
+    "title": "Pilih Orang untuk Dilacak",
+    "subtitle": "Klik pada orang untuk pratinjau dan konfirmasi",
+    "detectingPeople": "Mendeteksi orang...",
+    "noPeopleFound": "Tidak ada orang yang terdeteksi. Silakan coba video lain.",
+    "clickToPreview": "Klik untuk pratinjau",
+    "person": "Orang"
+  },
+  "personPreview": {
+    "selectThisPerson": "Pilih Orang Ini",
+    "cancel": "Batal",
+    "swipeToNavigate": "Geser untuk melihat orang lain"
+  },
+  "autoProcessing": {
+    "detectingVideo": "Mendeteksi orang dalam video...",
+    "calculatingReframe": "Menghitung reframe...",
+    "preparingPreview": "Menyiapkan pratinjau...",
+    "almostDone": "Hampir selesai..."
+  },
+  "result": {
+    "save": "Simpan",
+    "share": "Bagikan",
+    "selectAnother": "Pilih Orang Lain",
+    "processing": "Memproses video...",
+    "selectQuality": "Pilih Kualitas",
+    "qualityGood": "Baik (File lebih kecil)",
+    "qualityBetter": "Lebih Baik (Direkomendasikan)",
+    "qualityBest": "Terbaik (Kualitas tertinggi)",
+    "shareNotSupported": "Berbagi tidak didukung di browser ini",
+    "iosSaveInstructions": "Ketuk dan tahan video untuk menyimpan ke Foto"
   }
 }

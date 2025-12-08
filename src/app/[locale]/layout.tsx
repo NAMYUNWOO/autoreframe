@@ -18,12 +18,13 @@ const geistMono = Geist_Mono({
 });
 
 type Props = {
-  params: Promise<{ locale: Locale }>;
+  params: Promise<{ locale: string }>;
   children: React.ReactNode;
 };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { locale } = await params;
+  const { locale: localeParam } = await params;
+  const locale = (locales.includes(localeParam as Locale) ? localeParam : 'en') as Locale;
   const dict = await getDictionary(locale);
   
   const alternateLanguages = locales.reduce((acc, loc) => {
@@ -92,7 +93,8 @@ export default async function LocaleLayout({
   children,
   params,
 }: Props) {
-  const { locale } = await params;
+  const { locale: localeParam } = await params;
+  const locale = (locales.includes(localeParam as Locale) ? localeParam : 'en') as Locale;
   const dict = await getDictionary(locale);
 
   return (

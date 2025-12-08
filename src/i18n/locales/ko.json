@@ -33,5 +33,36 @@
     "title": "브라우저 최적화 안내",
     "description": "이 애플리케이션은 데스크탑 Chrome 브라우저에서 최상의 성능을 발휘합니다.",
     "recommendation": "최적의 비디오 처리 경험을 위해 데스크탑에서 Google Chrome 사용을 권장합니다."
+  },
+  "personGallery": {
+    "title": "추적할 사람을 선택하세요",
+    "subtitle": "사람을 클릭하여 미리보기 및 확인",
+    "detectingPeople": "사람 감지 중...",
+    "noPeopleFound": "사람이 감지되지 않았습니다. 다른 비디오를 시도해주세요.",
+    "clickToPreview": "클릭하여 미리보기",
+    "person": "사람"
+  },
+  "personPreview": {
+    "selectThisPerson": "이 사람 선택",
+    "cancel": "취소",
+    "swipeToNavigate": "스와이프하여 다른 사람 보기"
+  },
+  "autoProcessing": {
+    "detectingVideo": "비디오에서 사람 감지 중...",
+    "calculatingReframe": "리프레임 계산 중...",
+    "preparingPreview": "미리보기 준비 중...",
+    "almostDone": "거의 완료..."
+  },
+  "result": {
+    "save": "저장하기",
+    "share": "공유하기",
+    "selectAnother": "다른 사람 선택",
+    "processing": "비디오 처리 중...",
+    "selectQuality": "화질 선택",
+    "qualityGood": "좋음 (작은 파일)",
+    "qualityBetter": "더 좋음 (권장)",
+    "qualityBest": "최상 (최고 화질)",
+    "shareNotSupported": "이 브라우저에서는 공유가 지원되지 않습니다",
+    "iosSaveInstructions": "비디오를 길게 눌러 사진에 저장하세요"
   }
 }

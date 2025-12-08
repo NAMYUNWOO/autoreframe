@@ -36,6 +36,37 @@ export interface Dictionary {
     description: string;
     recommendation: string;
   };
+  personGallery: {
+    title: string;
+    subtitle: string;
+    detectingPeople: string;
+    noPeopleFound: string;
+    clickToPreview: string;
+    person: string;
+  };
+  personPreview: {
+    selectThisPerson: string;
+    cancel: string;
+    swipeToNavigate: string;
+  };
+  autoProcessing: {
+    detectingVideo: string;
+    calculatingReframe: string;
+    preparingPreview: string;
+    almostDone: string;
+  };
+  result: {
+    save: string;
+    share: string;
+    selectAnother: string;
+    processing: string;
+    selectQuality: string;
+    qualityGood: string;
+    qualityBetter: string;
+    qualityBest: string;
+    shareNotSupported: string;
+    iosSaveInstructions: string;
+  };
 }
 
 const dictionaries: Record<Locale, () => Promise<Dictionary>> = {

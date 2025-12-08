@@ -3,6 +3,7 @@ import { getOutputDimensions } from '../reframing/presets';
 import { ReframeSizeCalculatorV2 } from '../reframing/reframe-size-calculator-v2';
 import { Muxer as WebMMuxer, ArrayBufferTarget as WebMArrayBufferTarget } from 'webm-muxer';
 import { MP4MuxerHelper } from './mp4-muxer-helper';
+import { DeviceDetector } from '../utils/device';
 
 export class WebCodecsExporter {
   private decoder: VideoDecoder | null = null;
@@ -57,9 +58,8 @@ export class WebCodecsExporter {
     console.log('[WebCodecs Export] Target format:', this.outputFormat);
     
     // Check if mobile device
-    this.isMobile = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(
-      navigator.userAgent.toLowerCase()
-    );
+    const device = DeviceDetector.getInstance();
+    this.isMobile = device.isMobile;
     
     // Calculate output dimensions
     const { width: outputWidth, height: outputHeight } = getOutputDimensions(
@@ -218,7 +218,8 @@ export class WebCodecsExporter {
     
     // Try to find a working codec
     // More H.264 profiles to try
-    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    const deviceDetector = DeviceDetector.getInstance();
+    const isIOS = deviceDetector.isIOS;
     
     // iOS prefers baseline profile with lower levels
     const h264Codecs = isIOS ? [
@@ -402,6 +403,15 @@ export class WebCodecsExporter {
     reframingConfig?: ReframingConfig,
     initialTargetBox?: { width: number; height: number }
   ) {
+    console.log('[WebCodecs Export] processFrames called with:', {
+      transforms: transforms.size,
+      outputDimensions: { width: outputWidth, height: outputHeight },
+      hasReframingConfig: !!reframingConfig,
+      hasInitialTargetBox: !!initialTargetBox,
+      reframingConfig,
+      initialTargetBox
+    });
+
     // Create a new video element for export to avoid conflicts
     const exportVideo = document.createElement('video');
     exportVideo.src = videoElement.src;
@@ -427,12 +437,12 @@ export class WebCodecsExporter {
     // Create canvas for frame processing
     let canvas: HTMLCanvasElement | OffscreenCanvas;
     let ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
-    
+
     // Check if iOS - avoid OffscreenCanvas on iOS
-    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
-    
+    const deviceForCanvas = DeviceDetector.getInstance();
+
     // Try OffscreenCanvas first (except on iOS), fallback to regular canvas
-    if (!isIOS && typeof OffscreenCanvas !== 'undefined') {
+    if (!deviceForCanvas.isIOS && typeof OffscreenCanvas !== 'undefined') {
       try {
         canvas = new OffscreenCanvas(outputWidth, outputHeight);
         ctx = canvas.getContext('2d', {
@@ -951,18 +961,31 @@ export class WebCodecsExporter {
     ctx.fillRect(0, 0, outputWidth, outputHeight);
 
     let cropW: number, cropH: number;
-    
+
     if (initialTargetBox && reframingConfig) {
       const outputAspectRatio = outputWidth / outputHeight;
-      const calculatedDimensions = ReframeSizeCalculatorV2.calculateOptimalReframeSize(
-        initialTargetBox,
-        metadata.width,
-        metadata.height,
-        outputAspectRatio,
-        reframingConfig
-      );
-      cropW = calculatedDimensions.width;
-      cropH = calculatedDimensions.height;
+      try {
+        const calculatedDimensions = ReframeSizeCalculatorV2.calculateOptimalReframeSize(
+          initialTargetBox,
+          metadata.width,
+          metadata.height,
+          outputAspectRatio,
+          reframingConfig
+        );
+        cropW = calculatedDimensions.width;
+        cropH = calculatedDimensions.height;
+      } catch (e) {
+        console.error('[WebCodecs Export] Failed to calculate reframe size:', e);
+        console.error('[WebCodecs Export] Params:', {
+          initialTargetBox,
+          videoSize: { width: metadata.width, height: metadata.height },
+          outputAspectRatio,
+          reframingConfig
+        });
+        // Fallback to transform-based cropping
+        cropW = metadata.width / transform.scale;
+        cropH = metadata.height / transform.scale;
+      }
     } else {
       cropW = metadata.width / transform.scale;
       cropH = metadata.height / transform.scale;
@@ -997,10 +1020,14 @@ export class WebCodecsExporter {
     if (this.encodedChunks.length === 0) {
       throw new Error('No encoded chunks available. Export may have failed during encoding.');
     }
-    
+
+    if (!this.encoderConfig) {
+      throw new Error('Encoder configuration is not available. Encoder may not have been properly initialized.');
+    }
+
     if (this.outputFormat === 'mp4') {
       // Check codec support for MP4
-      if (!this.encoderConfig!.codec!.startsWith('avc')) {
+      if (!this.encoderConfig.codec || !this.encoderConfig.codec.startsWith('avc')) {
         console.log('[WebCodecs Export] Non-H.264 codec in MP4 not well supported, switching to WebM');
         this.outputFormat = 'webm';
         return this.createVideoBlob(fps);

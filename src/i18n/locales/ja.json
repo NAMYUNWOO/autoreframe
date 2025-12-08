@@ -33,5 +33,36 @@
     "title": "ブラウザ最適化のお知らせ",
     "description": "このアプリケーションはデスクトップ版Chromeブラウザで最高のパフォーマンスを発揮します。",
     "recommendation": "最適な動画処理体験のため、デスクトップでGoogle Chromeの使用をお勧めします。"
+  },
+  "personGallery": {
+    "title": "追跡する人物を選択",
+    "subtitle": "人物をクリックしてプレビューと確認",
+    "detectingPeople": "人物を検出中...",
+    "noPeopleFound": "人物が検出されませんでした。別の動画をお試しください。",
+    "clickToPreview": "クリックしてプレビュー",
+    "person": "人物"
+  },
+  "personPreview": {
+    "selectThisPerson": "この人物を選択",
+    "cancel": "キャンセル",
+    "swipeToNavigate": "スワイプして他の人物を見る"
+  },
+  "autoProcessing": {
+    "detectingVideo": "動画から人物を検出中...",
+    "calculatingReframe": "リフレームを計算中...",
+    "preparingPreview": "プレビューを準備中...",
+    "almostDone": "もうすぐ完了..."
+  },
+  "result": {
+    "save": "保存",
+    "share": "共有",
+    "selectAnother": "別の人物を選択",
+    "processing": "動画を処理中...",
+    "selectQuality": "品質を選択",
+    "qualityGood": "良い（小さいファイル）",
+    "qualityBetter": "より良い（推奨）",
+    "qualityBest": "最高（最高品質）",
+    "shareNotSupported": "このブラウザでは共有がサポートされていません",
+    "iosSaveInstructions": "動画を長押しして写真に保存してください"
   }
 }

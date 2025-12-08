@@ -94,9 +94,12 @@ export function useReframing() {
       format: 'mp4',
       quality: 0.9,
       codec: 'h264'
-    }
+    },
+    providedTransforms?: Map<number, FrameTransform>
   ): Promise<Blob> => {
-    if (!transforms.size) {
+    const transformsToUse = providedTransforms || transforms;
+
+    if (!transformsToUse.size) {
       throw new Error('No reframing data available');
     }
 
@@ -105,15 +108,15 @@ export function useReframing() {
 
     try {
       let blob: Blob;
-      
+
       // Use WebCodecs for all formats - replaces FFmpeg completely
       if (!webCodecsExporterRef.current) {
         webCodecsExporterRef.current = new WebCodecsExporter();
       }
-      
+
       blob = await webCodecsExporterRef.current.export(
         videoElement,
-        transforms,
+        transformsToUse,
         metadata,
         config.outputRatio,
         options,

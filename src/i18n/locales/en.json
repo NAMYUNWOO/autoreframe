@@ -33,5 +33,36 @@
     "title": "Browser Optimization Notice",
     "description": "This application is optimized for desktop Chrome browser for the best performance.",
     "recommendation": "For optimal video processing experience, we recommend using Google Chrome on desktop."
+  },
+  "personGallery": {
+    "title": "Select a Person to Track",
+    "subtitle": "Click on a person to preview and confirm",
+    "detectingPeople": "Detecting people...",
+    "noPeopleFound": "No people detected. Please try another video.",
+    "clickToPreview": "Click to preview",
+    "person": "Person"
+  },
+  "personPreview": {
+    "selectThisPerson": "Select This Person",
+    "cancel": "Cancel",
+    "swipeToNavigate": "Swipe to see other people"
+  },
+  "autoProcessing": {
+    "detectingVideo": "Detecting people in video...",
+    "calculatingReframe": "Calculating reframe...",
+    "preparingPreview": "Preparing preview...",
+    "almostDone": "Almost done..."
+  },
+  "result": {
+    "save": "Save",
+    "share": "Share",
+    "selectAnother": "Select Another Person",
+    "processing": "Processing video...",
+    "selectQuality": "Select Quality",
+    "qualityGood": "Good (Smaller file)",
+    "qualityBetter": "Better (Recommended)",
+    "qualityBest": "Best (Highest quality)",
+    "shareNotSupported": "Sharing is not supported on this browser",
+    "iosSaveInstructions": "Tap and hold the video to save to Photos"
   }
 }

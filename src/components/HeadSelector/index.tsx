@@ -5,6 +5,7 @@ import { Detection, BoundingBox, ReframingConfig, VideoMetadata } from '@/types'
 import { REFRAMING_PRESETS } from '@/lib/reframing/presets';
 import { isDevelopment } from '@/lib/utils/env';
 import { getAdaptiveConfig } from '@/config/detection-adaptive';
+import { DeviceDetector } from '@/lib/utils/device';
 
 interface HeadSelectorProps {
   videoElement: HTMLVideoElement | null;
@@ -161,23 +162,23 @@ export function HeadSelector({
     });
 
     // Set canvas size - optimize for mobile
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    
+    const device = DeviceDetector.getInstance();
+
     // Use metadata dimensions if available (which include rotation), otherwise use video dimensions
     let canvasWidth = metadata?.width || videoElement.videoWidth;
     let canvasHeight = metadata?.height || videoElement.videoHeight;
-    
+
     console.log('[HeadSelector] Video dimensions:', {
       videoWidth: videoElement.videoWidth,
       videoHeight: videoElement.videoHeight,
       metadataWidth: metadata?.width,
       metadataHeight: metadata?.height,
       rotation: metadata?.rotation,
-      isMobile
+      isMobile: device.isMobile
     });
-    
+
     // For mobile, limit canvas size to reduce memory usage
-    if (isMobile && (canvasWidth > 1920 || canvasHeight > 1920)) {
+    if (device.isMobile && (canvasWidth > 1920 || canvasHeight > 1920)) {
       const scale = Math.min(1920 / canvasWidth, 1920 / canvasHeight);
       canvasWidth = Math.floor(canvasWidth * scale);
       canvasHeight = Math.floor(canvasHeight * scale);
@@ -201,11 +202,11 @@ export function HeadSelector({
     // Canvas size configured
     
     // Debug: Check if canvas has actual content
-    if (isMobile) {
+    if (device.isMobile) {
       const imageData = ctx.getImageData(0, 0, Math.min(10, canvas.width), Math.min(10, canvas.height));
       const hasContent = imageData.data.some((pixel, i) => i % 4 !== 3 && pixel !== 0);
       // Canvas content check
-      
+
       // Try to save canvas as image for debugging
       try {
         const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
@@ -218,23 +219,23 @@ export function HeadSelector({
     // Import and run detection
     try {
       // Show mobile-specific message
-      if (isMobile) {
+      if (device.isMobile) {
         setIsDetecting(true);
         // Mobile device detected - using optimized detection
       }
-      
+
       // console.log('Importing PersonYOLODetector...');
       const { PersonYOLODetector } = await import('@/lib/detection/person-yolo');
-      
+
       // Use singleton on mobile to save memory
-      const detector = isMobile ? PersonYOLODetector.getInstance() : new PersonYOLODetector();
-      
+      const detector = device.isMobile ? PersonYOLODetector.getInstance() : new PersonYOLODetector();
+
       // console.log('Initializing detector...');
       await detector.initialize();
-      
+
       // Set a lower threshold for initial detection to ensure we catch all persons
       // Even lower for mobile to debug - try extremely low value
-      detector.setConfidenceThreshold(isMobile ? 0.00001 : 0.3);
+      detector.setConfidenceThreshold(device.isMobile ? 0.00001 : 0.3);
       
       // console.log('Running detection on first frame...');
       // Always use canvas for detection to ensure consistency
@@ -374,7 +375,7 @@ export function HeadSelector({
       setDetections(finalDetections);
       
       // Don't dispose on mobile if using singleton
-      if (!isMobile) {
+      if (!device.isMobile) {
         detector.dispose();
       }
 
@@ -386,9 +387,9 @@ export function HeadSelector({
       }
     } catch (error) {
       console.error('Failed to detect persons:', error);
-      
+
       // Provide mobile-specific error messages
-      if (isMobile) {
+      if (device.isMobile) {
         if (error instanceof Error && error.message.includes('WebGL')) {
           alert('WebGL is not supported on this mobile browser. Please try using Chrome or Safari.');
         } else if (error instanceof Error && error.message.includes('memory')) {

@@ -33,5 +33,36 @@
     "title": "Aviso de Optimización del Navegador",
     "description": "Esta aplicación está optimizada para el navegador Chrome de escritorio para obtener el mejor rendimiento.",
     "recommendation": "Para una experiencia óptima de procesamiento de video, recomendamos usar Google Chrome en escritorio."
+  },
+  "personGallery": {
+    "title": "Selecciona una Persona para Rastrear",
+    "subtitle": "Haz clic en una persona para vista previa y confirmación",
+    "detectingPeople": "Detectando personas...",
+    "noPeopleFound": "No se detectaron personas. Por favor, prueba otro video.",
+    "clickToPreview": "Haz clic para vista previa",
+    "person": "Persona"
+  },
+  "personPreview": {
+    "selectThisPerson": "Seleccionar Esta Persona",
+    "cancel": "Cancelar",
+    "swipeToNavigate": "Desliza para ver otras personas"
+  },
+  "autoProcessing": {
+    "detectingVideo": "Detectando personas en el video...",
+    "calculatingReframe": "Calculando reencuadre...",
+    "preparingPreview": "Preparando vista previa...",
+    "almostDone": "Casi listo..."
+  },
+  "result": {
+    "save": "Guardar",
+    "share": "Compartir",
+    "selectAnother": "Seleccionar Otra Persona",
+    "processing": "Procesando video...",
+    "selectQuality": "Seleccionar Calidad",
+    "qualityGood": "Buena (Archivo más pequeño)",
+    "qualityBetter": "Mejor (Recomendado)",
+    "qualityBest": "Óptima (Máxima calidad)",
+    "shareNotSupported": "Compartir no es compatible con este navegador",
+    "iosSaveInstructions": "Mantén presionado el video para guardar en Fotos"
   }
 }

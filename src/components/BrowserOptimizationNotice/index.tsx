@@ -1,5 +1,6 @@
 import React from 'react';
 import { AlertCircle, Chrome } from 'lucide-react';
+import { DeviceDetector } from '@/lib/utils/device';
 
 interface BrowserOptimizationNoticeProps {
   dictionary?: {
@@ -22,9 +23,9 @@ export const BrowserOptimizationNotice: React.FC<BrowserOptimizationNoticeProps>
   const text = dictionary || defaultText;
   
   // Check if user is on Chrome desktop
+  const device = DeviceDetector.getInstance();
   const isChrome = /Chrome/.test(navigator.userAgent) && !/Edg/.test(navigator.userAgent);
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-  const isOptimalBrowser = isChrome && !isMobile;
+  const isOptimalBrowser = isChrome && device.isDesktop;
   
   if (dismissed || isOptimalBrowser) {
     return null;

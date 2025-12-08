@@ -1,8 +1,7 @@
 'use client';
 
 import NoSSRWrapper from "@/components/NoSSRWrapper";
-import Home from "./Home";
-import { BrowserOptimizationNotice } from "@/components/BrowserOptimizationNotice";
+import HomeSimplified from "./HomeSimplified";
 import { useEffect, useState } from "react";
 import { getDictionary } from "@/i18n/dictionaries";
 import { Locale } from "@/i18n/config";
@@ -13,7 +12,7 @@ interface PageProps {
 
 export default function Page({ params }: PageProps) {
   const [dictionary, setDictionary] = useState<any>(null);
-  
+
   useEffect(() => {
     params.then(({ locale }) => {
       getDictionary(locale).then(dict => {
@@ -21,14 +20,14 @@ export default function Page({ params }: PageProps) {
       });
     });
   }, [params]);
-  
+
   if (!dictionary) {
-    return null; // Or a loading state
+    return null;
   }
-  
+
   return (
     <NoSSRWrapper>
-      <Home dictionary={dictionary} browserNotice={dictionary.browserNotice} />
+      <HomeSimplified dictionary={dictionary} browserNotice={dictionary.browserNotice} />
     </NoSSRWrapper>
   );
 }

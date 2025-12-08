@@ -33,5 +33,36 @@
     "title": "浏览器优化通知",
     "description": "此应用程序在桌面版Chrome浏览器中能发挥最佳性能。",
     "recommendation": "为获得最佳视频处理体验，我们建议在桌面设备上使用Google Chrome。"
+  },
+  "personGallery": {
+    "title": "选择要追踪的人物",
+    "subtitle": "点击人物进行预览和确认",
+    "detectingPeople": "正在检测人物...",
+    "noPeopleFound": "未检测到人物。请尝试其他视频。",
+    "clickToPreview": "点击预览",
+    "person": "人物"
+  },
+  "personPreview": {
+    "selectThisPerson": "选择此人物",
+    "cancel": "取消",
+    "swipeToNavigate": "滑动查看其他人物"
+  },
+  "autoProcessing": {
+    "detectingVideo": "正在视频中检测人物...",
+    "calculatingReframe": "正在计算重构...",
+    "preparingPreview": "正在准备预览...",
+    "almostDone": "即将完成..."
+  },
+  "result": {
+    "save": "保存",
+    "share": "分享",
+    "selectAnother": "选择其他人物",
+    "processing": "正在处理视频...",
+    "selectQuality": "选择质量",
+    "qualityGood": "良好（较小文件）",
+    "qualityBetter": "更好（推荐）",
+    "qualityBest": "最佳（最高质量）",
+    "shareNotSupported": "此浏览器不支持分享",
+    "iosSaveInstructions": "长按视频保存到照片"
   }
 }

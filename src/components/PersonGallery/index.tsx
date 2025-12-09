@@ -40,23 +40,93 @@ export default function PersonGallery({ videoElement, onPersonSelect, dict }: Pe
     const detectPeopleInFirstFrame = async () => {
       try {
         const canvas = canvasRef.current;
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-
-        canvas.width = videoElement.videoWidth;
-        canvas.height = videoElement.videoHeight;
-
-        if (canvas.width === 0 || canvas.height === 0) {
-          console.error('Video dimensions are 0');
+        if (!canvas) {
+          console.error('[PersonGallery] Canvas not found');
           setIsDetecting(false);
           return;
         }
 
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          console.error('[PersonGallery] Failed to get canvas context');
+          setIsDetecting(false);
+          return;
+        }
+
+        // Ensure video is at first frame and wait for seek to complete
+        console.log('[PersonGallery] Seeking to first frame...');
+
+        // If already at 0 and ready, skip seeking
+        if (videoElement.currentTime === 0 && videoElement.readyState >= 2) {
+          console.log('[PersonGallery] Already at first frame, skipping seek');
+        } else {
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              videoElement.removeEventListener('seeked', onSeeked);
+              reject(new Error('Seek timeout'));
+            }, 5000);
+
+            const onSeeked = () => {
+              clearTimeout(timeout);
+              console.log('[PersonGallery] Seeked to first frame');
+              resolve();
+            };
+
+            videoElement.addEventListener('seeked', onSeeked, { once: true });
+            videoElement.currentTime = 0;
+          });
+        }
+
+        // Wait for video to be fully ready
+        if (videoElement.readyState < 2) {
+          console.log('[PersonGallery] Waiting for video to be ready...');
+          await new Promise<void>((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Video ready timeout')), 10000);
+            const checkReady = () => {
+              if (videoElement.readyState >= 2) {
+                clearTimeout(timeout);
+                resolve();
+              } else {
+                requestAnimationFrame(checkReady);
+              }
+            };
+            checkReady();
+          });
+        }
+
+        canvas.width = videoElement.videoWidth;
+        canvas.height = videoElement.videoHeight;
+
+        console.log(`[PersonGallery] Canvas dimensions: ${canvas.width}x${canvas.height}`);
+
+        if (canvas.width === 0 || canvas.height === 0) {
+          console.error('[PersonGallery] Video dimensions are 0');
+          setIsDetecting(false);
+          alert('비디오를 로드할 수 없습니다. 다른 비디오를 시도해주세요.');
+          return;
+        }
+
+        // Draw video frame to canvas
         ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
 
-        console.log('Starting detection on first frame...');
+        // Verify canvas has content (not blank)
+        const imageData = ctx.getImageData(0, 0, Math.min(100, canvas.width), Math.min(100, canvas.height));
+        const hasContent = imageData.data.some((value, index) => index % 4 !== 3 && value > 0);
+        console.log(`[PersonGallery] Canvas has content: ${hasContent}`);
+
+        if (!hasContent) {
+          console.warn('[PersonGallery] Canvas appears to be blank, retrying after another seek...');
+          // Re-seek and try again
+          await new Promise<void>((resolve) => {
+            const onSeeked = () => resolve();
+            videoElement.addEventListener('seeked', onSeeked, { once: true });
+            videoElement.currentTime = 0.001; // Small offset to force seek
+          });
+          await new Promise(resolve => setTimeout(resolve, 100));
+          ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+        }
+
+        console.log('[PersonGallery] Starting detection on first frame...');
 
         const { PersonYOLODetector } = await import('@/lib/detection/person-yolo');
         const { ByteTracker } = await import('@/lib/detection/bytetrack-proper/byte-tracker');
@@ -75,12 +145,12 @@ export default function PersonGallery({ videoElement, onPersonSelect, dict }: Pe
           lowThresh: 0.1,
         });
 
-        console.log('About to call detector.detect()...');
+        console.log('[PersonGallery] About to call detector.detect()...');
         const detections = await detector.detect(canvas, 0);
-        console.log(`Detected ${detections.length} people`);
+        console.log(`[PersonGallery] Raw detections: ${detections.length}`, detections.slice(0, 3));
 
         const trackedDetections = tracker.update(detections, 0);
-        console.log(`Tracked ${trackedDetections.length} people`);
+        console.log(`[PersonGallery] Tracked detections: ${trackedDetections.length}`);
 
         const thumbnailData: PersonThumbnail[] = [];
 
@@ -131,32 +201,25 @@ export default function PersonGallery({ videoElement, onPersonSelect, dict }: Pe
       }
     };
 
-    const startDetection = () => {
-      if (videoElement.readyState >= 2) {
-        detectPeopleInFirstFrame();
-      } else {
-        const handleLoadedData = () => {
-          detectPeopleInFirstFrame();
-        };
-        videoElement.addEventListener('loadeddata', handleLoadedData, { once: true });
+    // Start detection with timeout
+    const timeoutMs = 30000; // 30 second timeout
+
+    const detectWithTimeout = async () => {
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Detection timeout')), timeoutMs)
+      );
+
+      try {
+        await Promise.race([detectPeopleInFirstFrame(), timeoutPromise]);
+      } catch (error) {
+        console.error('[PersonGallery] Detection failed or timed out:', error);
+        setIsDetecting(false);
+        alert('사람 감지에 실패했습니다. 다시 시도해주세요.');
       }
     };
 
-    videoElement.currentTime = 0;
-
-    const handleSeeked = () => {
-      startDetection();
-    };
-
-    if (videoElement.currentTime === 0 && videoElement.readyState >= 2) {
-      detectPeopleInFirstFrame();
-    } else {
-      videoElement.addEventListener('seeked', handleSeeked, { once: true });
-    }
-
-    return () => {
-      videoElement.removeEventListener('seeked', handleSeeked);
-    };
+    // detectPeopleInFirstFrame now handles seeking internally, so just call it
+    detectWithTimeout();
   }, [videoElement]);
 
   const handleThumbnailClick = (thumbnail: PersonThumbnail) => {

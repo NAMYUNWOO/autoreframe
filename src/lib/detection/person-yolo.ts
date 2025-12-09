@@ -212,14 +212,14 @@ export class PersonYOLODetector {
     // Extract confidence scores (index 4)
     const confidences = squeezedPredictions.slice([0, 4], [-1, 1]).squeeze(); // Shape: [300]
     
-    // Get the data synchronously for processing
-    const predictionsData = squeezedPredictions.arraySync() as number[][];
-    let confidenceData = confidences.dataSync() as Float32Array;
-      
+    // Get the data asynchronously to avoid blocking the main thread on mobile
+    const predictionsData = await squeezedPredictions.array() as number[][];
+    let confidenceData = await confidences.data() as Float32Array;
+
       // YOLOv12n might output confidence values in a separate tensor
       // Check this regardless of platform for consistency
       if (confidenceTensor) {
-        const secondTensorData = confidenceTensor.dataSync() as Float32Array;
+        const secondTensorData = await confidenceTensor.data() as Float32Array;
         
         // If the main tensor has all zero confidences but second tensor has values, 
         // use the second tensor for confidence scores

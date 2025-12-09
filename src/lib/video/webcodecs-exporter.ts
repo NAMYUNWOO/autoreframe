@@ -417,18 +417,27 @@ export class WebCodecsExporter {
     exportVideo.src = videoElement.src;
     exportVideo.muted = true;
     exportVideo.playsInline = true;
-    
+    exportVideo.preload = 'auto';
+    exportVideo.load();  // Required for mobile browsers to start loading
+
     // Wait for video to load
     await new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Export video load timeout'));
-      }, 10000);
-      
+      }, 15000);  // Increased timeout for mobile
+
+      // Check if already loaded
+      if (exportVideo.readyState >= 2) {
+        clearTimeout(timeout);
+        resolve();
+        return;
+      }
+
       exportVideo.onloadeddata = () => {
         clearTimeout(timeout);
         resolve();
       };
-      
+
       exportVideo.onerror = () => {
         clearTimeout(timeout);
         reject(new Error('Failed to load export video'));

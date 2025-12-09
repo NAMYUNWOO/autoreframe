@@ -92,58 +92,91 @@ export default function HomeSimplified({ dictionary, browserNotice }: HomeSimpli
 
     setCurrentStep('processing');
 
+    // Helper function to calculate IoU (Intersection over Union)
+    const calculateIoU = (box1: { x: number; y: number; width: number; height: number }, box2: { x: number; y: number; width: number; height: number }) => {
+      const x1 = Math.max(box1.x, box2.x);
+      const y1 = Math.max(box1.y, box2.y);
+      const x2 = Math.min(box1.x + box1.width, box2.x + box2.width);
+      const y2 = Math.min(box1.y + box1.height, box2.y + box2.height);
+
+      if (x2 < x1 || y2 < y1) return 0;
+
+      const intersection = (x2 - x1) * (y2 - y1);
+      const area1 = box1.width * box1.height;
+      const area2 = box2.width * box2.height;
+      const union = area1 + area2 - intersection;
+
+      return intersection / union;
+    };
+
     try {
       setProcessingStatus(dictionary.autoProcessing.detectingVideo);
 
-      console.log('[handlePersonSelect] Starting full video detection for trackId:', trackId);
+      // Store the original selected box from PersonGallery for matching
+      const selectedBox = detection.boxes[0];
+      console.log('[handlePersonSelect] Selected box from PersonGallery:', selectedBox);
+
+      console.log('[handlePersonSelect] Starting full video detection...');
       const allDetections = await processVideo(processFrames, metadata, 5);
       console.log('[handlePersonSelect] Full video detection complete, detections:', allDetections.length);
 
       setProcessingStatus(dictionary.autoProcessing.calculatingReframe);
 
-      selectByteTrackId(trackId);
+      // Find the matching track by comparing bounding box positions in early frames
+      // PersonGallery and full detection use different ByteTrackers, so track IDs won't match
+      // Instead, find the track whose first-frame detection best matches the selected box
 
-      await new Promise(resolve => setTimeout(resolve, 100));
+      let matchedTrackId: string | null = null;
+      let bestIoU = 0;
 
-      const selectedTrack = getSelectedTrack();
-      console.log('[handlePersonSelect] Selected track:', selectedTrack);
+      // Look at first few frames to find the best matching track
+      const earlyFrameDetections = allDetections.filter(d => d.frameNumber <= 10);
 
-      let trackToUse = selectedTrack;
+      for (const frameDetection of earlyFrameDetections) {
+        for (const box of frameDetection.boxes) {
+          if (!box.trackId) continue;
 
-      if (!selectedTrack && allDetections.length > 0) {
-        console.log('[handlePersonSelect] Creating manual track from detections for trackId:', trackId);
-
-        const trackDetections = allDetections.filter(d =>
-          d.boxes.some(box => box.trackId === trackId)
-        );
-
-        if (trackDetections.length === 0) {
-          throw new Error(`No detections found for track ID: ${trackId}`);
-        }
-
-        const positions = new Map();
-        trackDetections.forEach(d => {
-          const box = d.boxes.find(b => b.trackId === trackId);
-          if (box) {
-            positions.set(d.frameNumber, box);
+          const iou = calculateIoU(selectedBox, box);
+          if (iou > bestIoU) {
+            bestIoU = iou;
+            matchedTrackId = box.trackId;
           }
-        });
-
-        trackToUse = {
-          id: trackId,
-          firstFrame: trackDetections[0].frameNumber,
-          lastFrame: trackDetections[trackDetections.length - 1].frameNumber,
-          positions,
-          label: 'person',
-          selected: true,
-        };
-
-        console.log('[handlePersonSelect] Created manual track:', trackToUse, 'positions count:', positions.size);
+        }
       }
 
-      if (!trackToUse) {
-        throw new Error('No detections available for selected person');
+      console.log('[handlePersonSelect] Best matching track:', matchedTrackId, 'with IoU:', bestIoU);
+
+      if (!matchedTrackId || bestIoU < 0.3) {
+        throw new Error('Could not find matching person in full video detection');
       }
+
+      // Now use the matched track ID from full detection
+      const trackDetections = allDetections.filter(d =>
+        d.boxes.some(box => box.trackId === matchedTrackId)
+      );
+
+      if (trackDetections.length === 0) {
+        throw new Error(`No detections found for matched track ID: ${matchedTrackId}`);
+      }
+
+      const positions = new Map();
+      trackDetections.forEach(d => {
+        const box = d.boxes.find(b => b.trackId === matchedTrackId);
+        if (box) {
+          positions.set(d.frameNumber, box);
+        }
+      });
+
+      const trackToUse = {
+        id: matchedTrackId,
+        firstFrame: trackDetections[0].frameNumber,
+        lastFrame: trackDetections[trackDetections.length - 1].frameNumber,
+        positions,
+        label: 'person',
+        selected: true,
+      };
+
+      console.log('[handlePersonSelect] Created track from matched detections:', trackToUse.id, 'positions count:', positions.size);
 
       const initialTargetBox = {
         width: detection.boxes[0].width,
